@@ -1,0 +1,28 @@
+[build-system]
+requires = ["flit_core >=3.2,<4"]
+build-backend = "flit_core.buildapi"
+
+[project]
+name = "pyupgw"
+authors = [{name = "Jaakko Moisio", email = "jaakko@moisio.fi"}]
+license = {file = "LICENSE"}
+classifiers = ["License :: OSI Approved :: MIT License"]
+dynamic = ["version", "description"]
+dependencies = [
+  "pycognito>=2023.5.0",
+  "awscrt",
+  "awsiotsdk>=1,<2",
+]
+
+[project.optional-dependencies]
+dev = [
+  "black>=23.12.0",
+  "pylint>=3.0.3",
+  "mypy>=1.7",
+]
+
+[project.urls]
+Home = "https://github.com/jasujm/pyupgw"
+
+[tool.mypy]
+ignore_missing_imports = true

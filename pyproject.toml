@@ -12,6 +12,7 @@ dependencies = [
   "pycognito>=2023.5.0",
   "awscrt",
   "awsiotsdk>=1,<2",
+  "attrs",
 ]
 
 [project.optional-dependencies]

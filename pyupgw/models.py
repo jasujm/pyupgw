@@ -9,6 +9,7 @@ from attrs import define
 class DeviceType(enum.Enum):
     """Device type"""
 
+    DEVICE = "device"
     GATEWAY = "gateway"
 
 

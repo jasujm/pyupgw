@@ -6,7 +6,7 @@ from attrs import define, field
 from hypothesis import given
 import pytest
 
-from pyupgw import create_client, Device
+from pyupgw import create_client, DeviceAttributes, Occupant
 import pyupgw.client
 
 
@@ -33,7 +33,9 @@ def _mock_service_api(monkeypatch):
 
 @pytest.mark.asyncio
 @given(...)
-async def test_get_devices(devices: list[Device], id_token: str, access_token: str):
+async def test_get_gateways(
+    gateways: list[tuple[DeviceAttributes, Occupant]], id_token: str, access_token: str
+):
     with pytest.MonkeyPatch().context() as monkeypatch:
         aws = _mock_aws(monkeypatch)
         service_api = _mock_service_api(monkeypatch)
@@ -43,21 +45,33 @@ async def test_get_devices(devices: list[Device], id_token: str, access_token: s
         service_api.get_slider_list.return_value = {
             "data": [
                 {
-                    "id": str(device.id),
-                    "type": device.type.value,
+                    "id": str(attributes.id),
+                    "type": attributes.type.value,
                     "gateway": {
-                        "id": str(device.id),
-                        "device_code": device.device_code,
-                        "model": device.model,
-                        "name": device.name,
+                        "id": str(attributes.id),
+                        "device_code": attributes.device_code,
+                        "model": attributes.model,
+                        "name": attributes.name,
+                        "occupant_permissions": {
+                            "receiver_occupant": {
+                                "id": str(occupant.id),
+                                "email": occupant.email,
+                                "first_name": occupant.first_name,
+                                "last_name": occupant.last_name,
+                                "identity_id": occupant.identity_id,
+                            }
+                        },
                     },
                 }
-                for device in devices
+                for (attributes, occupant) in gateways
             ]
         }
 
         async with create_client("user", "password") as client:
-            assert client.get_devices() == devices
+            assert [
+                (gateway.get_attributes(), gateway.get_occupant())
+                for gateway in client.get_gateways()
+            ] == gateways
 
         aws.authenticate.assert_awaited()
         service_api.get_slider_list.assert_awaited_with(

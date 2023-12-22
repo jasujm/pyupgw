@@ -3,4 +3,5 @@
 __version__ = "0.1"
 
 from .client import Client, create_client
-from .models import Device, DeviceType
+from .gateway import Gateway
+from .models import DeviceAttributes, DeviceType, Occupant

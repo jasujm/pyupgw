@@ -6,18 +6,28 @@ import contextlib
 import aiohttp
 
 from ._api import AwsApi, ServiceApi
-from .models import DeviceType, Device
+from .models import DeviceType, DeviceAttributes, Occupant
+from .gateway import Gateway
 
 
-def _parse_device(data):
+def _parse_gateway_attributes_and_occupant(data):
     gateway_data = data["gateway"]
-    return Device(
+    attributes = DeviceAttributes(
         id=uuid.UUID(data["id"]),
         type=DeviceType(data["type"]),
         device_code=str(gateway_data["device_code"]),
         model=str(gateway_data["model"]),
         name=str(gateway_data["name"]),
     )
+    occupant_data = gateway_data["occupant_permissions"]["receiver_occupant"]
+    occupant = Occupant(
+        id=uuid.UUID(occupant_data["id"]),
+        email=str(occupant_data["email"]),
+        first_name=str(occupant_data["first_name"]),
+        last_name=str(occupant_data["last_name"]),
+        identity_id=str(occupant_data["identity_id"]),
+    )
+    return attributes, occupant
 
 
 def _create_aws_api(username: str):
@@ -38,16 +48,16 @@ class Client:
     :func:`create_client()` context manager.
     """
 
-    def __init__(self, devices: list[Device]):
+    def __init__(self, gateways: list[Gateway]):
         """
         Parameters:
-          devices: list of managed devices
+          gateways: managed gateways
         """
-        self._devices: list[Device] = devices
+        self._gateways = gateways
 
-    def get_devices(self):
-        """Get the managed devices"""
-        return self._devices
+    def get_gateways(self):
+        """Get the managed gateways"""
+        return self._gateways
 
 
 @contextlib.asynccontextmanager
@@ -60,7 +70,7 @@ async def create_client(username: str, password: str):
     .. code-block:: python
 
         async with create_client("user@example.com", "password") as client:
-           print(client.get_devices())
+           print(client.get_gateways())
     """
 
     aws = _create_aws_api(username)
@@ -70,9 +80,9 @@ async def create_client(username: str, password: str):
         slider_list = await service_api.get_slider_list(
             id_token, access_token, aiohttp_session
         )
-    devices = [
-        _parse_device(device_data)
-        for device_data in slider_list["data"]
-        if device_data["type"] == "gateway"
+    gateways = [
+        Gateway(*_parse_gateway_attributes_and_occupant(gateway_data))
+        for gateway_data in slider_list["data"]
+        if gateway_data["type"] == "gateway"
     ]
-    yield Client(devices)
+    yield Client(gateways)

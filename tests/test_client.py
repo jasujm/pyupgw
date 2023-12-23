@@ -8,7 +8,7 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 import pyupgw.client
-from pyupgw import DeviceAttributes, DeviceType, GatewayAttributes, create_client
+from pyupgw import DeviceType, GatewayAttributes, IotDeviceAttributes, create_client
 
 
 def _mock_aws(monkeypatch):
@@ -33,18 +33,9 @@ def _mock_service_api(monkeypatch):
 
 
 @pytest.mark.asyncio
-@given(
-    gateways=st.lists(
-        st.tuples(
-            st.builds(GatewayAttributes),
-            st.lists(st.builds(DeviceAttributes, type=st.just(DeviceType.DEVICE))),
-        )
-    ),
-    id_token=...,
-    access_token=...,
-)
+@given(...)
 async def test_get_gateways(
-    gateways: list[tuple[GatewayAttributes, list[DeviceAttributes]]],
+    gateways: list[tuple[GatewayAttributes, list[IotDeviceAttributes]]],
     id_token: str,
     access_token: str,
 ):

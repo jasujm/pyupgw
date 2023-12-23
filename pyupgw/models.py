@@ -42,6 +42,13 @@ class GatewayAttributes(DeviceAttributes):
     occupant: Occupant
 
 
+@define
+class IotDeviceAttributes(DeviceAttributes):
+    """Attributes of an IoT device managed by gateway"""
+
+    type: typing.Literal[DeviceType.DEVICE]
+
+
 class Device:
     """Handle for a managed device"""
 

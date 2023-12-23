@@ -5,31 +5,29 @@ import uuid
 from collections.abc import Iterable
 
 import aiohttp
-import attrs
 
 from ._api import AwsApi, ServiceApi
-from .models import Device, DeviceAttributes, DeviceType, GatewayAttributes, Occupant
+from .models import Device, DeviceType, GatewayAttributes, IotDeviceAttributes, Occupant
 
 
-def _parse_device_attributes(data, type_):
-    return DeviceAttributes(
-        id=uuid.UUID(data["id"]),
-        type=type_,
-        device_code=str(data["device_code"]),
-        model=str(data["model"]),
-        name=str(data["name"]),
-    )
+def _parse_device_attributes(data):
+    return {
+        "id": uuid.UUID(data["id"]),
+        "device_code": str(data["device_code"]),
+        "model": str(data["model"]),
+        "name": str(data["name"]),
+    }
 
 
 def _parse_gateway_attributes(data):
     gateway_data = data["gateway"]
-    attributes = _parse_device_attributes(gateway_data, DeviceType.GATEWAY)
+    attributes = _parse_device_attributes(gateway_data)
     occupant_data = gateway_data["occupants_permissions"]["receiver_occupant"]
     occupant = Occupant(
         id=uuid.UUID(occupant_data["id"]),
         identity_id=str(occupant_data["identity_id"]),
     )
-    return GatewayAttributes(**attrs.asdict(attributes), occupant=occupant)
+    return GatewayAttributes(type=DeviceType.GATEWAY, **attributes, occupant=occupant)
 
 
 def _parse_devices(data):
@@ -38,7 +36,9 @@ def _parse_devices(data):
             yield from _parse_devices(item_data)
         # the gateway itself appears under items, but let's exclude it
         elif "device_code" in item_data and "occupants_permissions" not in item_data:
-            yield _parse_device_attributes(item_data, DeviceType.DEVICE)
+            yield IotDeviceAttributes(
+                type=DeviceType.DEVICE, **_parse_device_attributes(item_data)
+            )
 
 
 async def _construct_client_data(id_token: str, access_token: str):

@@ -9,8 +9,8 @@ used directly.  Breaking changes may be introduced between minor versions.
 
 import asyncio
 import contextlib
-from collections.abc import Awaitable
 import typing
+from collections.abc import Awaitable
 
 import aiohttp
 from awscrt.auth import AwsCredentialsProvider

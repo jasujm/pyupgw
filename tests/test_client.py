@@ -2,17 +2,13 @@
 
 import unittest.mock
 
-from attrs import define, field
-from hypothesis import given, strategies as st
 import pytest
+from attrs import define, field
+from hypothesis import given
+from hypothesis import strategies as st
 
-from pyupgw import (
-    create_client,
-    GatewayAttributes,
-    DeviceAttributes,
-    DeviceType,
-)
 import pyupgw.client
+from pyupgw import DeviceAttributes, DeviceType, GatewayAttributes, create_client
 
 
 def _mock_aws(monkeypatch):

@@ -1,14 +1,14 @@
 """Main client code"""
 
-from collections.abc import Iterable
-import uuid
 import contextlib
+import uuid
+from collections.abc import Iterable
 
 import aiohttp
 import attrs
 
 from ._api import AwsApi, ServiceApi
-from .models import DeviceType, DeviceAttributes, GatewayAttributes, Device, Occupant
+from .models import Device, DeviceAttributes, DeviceType, GatewayAttributes, Occupant
 
 
 def _parse_device_attributes(data, type_):

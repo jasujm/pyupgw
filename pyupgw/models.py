@@ -1,9 +1,9 @@
 """Models and data structures used by the library"""
 
-from collections.abc import Iterable
 import enum
 import typing
 import uuid
+from collections.abc import Iterable
 
 from attrs import define
 

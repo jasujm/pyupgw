@@ -66,9 +66,6 @@ async def test_get_gateways(
                     "occupants_permissions": {
                         "receiver_occupant": {
                             "id": str(attributes.occupant.id),
-                            "email": attributes.occupant.email,
-                            "first_name": attributes.occupant.first_name,
-                            "last_name": attributes.occupant.last_name,
                             "identity_id": attributes.occupant.identity_id,
                         }
                     },

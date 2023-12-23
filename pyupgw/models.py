@@ -31,9 +31,6 @@ class Occupant:
     """Occupant of a managed device"""
 
     id: uuid.UUID
-    email: str
-    first_name: str
-    last_name: str
     identity_id: str
 
 

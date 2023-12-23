@@ -27,9 +27,6 @@ def _parse_gateway_attributes(data):
     occupant_data = gateway_data["occupants_permissions"]["receiver_occupant"]
     occupant = Occupant(
         id=uuid.UUID(occupant_data["id"]),
-        email=str(occupant_data["email"]),
-        first_name=str(occupant_data["first_name"]),
-        last_name=str(occupant_data["last_name"]),
         identity_id=str(occupant_data["identity_id"]),
     )
     return GatewayAttributes(**attrs.asdict(attributes), occupant=occupant)

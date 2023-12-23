@@ -6,7 +6,12 @@ from attrs import define, field
 from hypothesis import given, strategies as st
 import pytest
 
-from pyupgw import create_client, DeviceAttributes, DeviceType, Occupant
+from pyupgw import (
+    create_client,
+    GatewayAttributes,
+    DeviceAttributes,
+    DeviceType,
+)
 import pyupgw.client
 
 
@@ -35,8 +40,7 @@ def _mock_service_api(monkeypatch):
 @given(
     gateways=st.lists(
         st.tuples(
-            st.builds(DeviceAttributes, type=st.just(DeviceType.GATEWAY)),
-            st.builds(Occupant),
+            st.builds(GatewayAttributes),
             st.lists(st.builds(DeviceAttributes, type=st.just(DeviceType.DEVICE))),
         )
     ),
@@ -44,7 +48,7 @@ def _mock_service_api(monkeypatch):
     access_token=...,
 )
 async def test_get_gateways(
-    gateways: list[tuple[DeviceAttributes, Occupant, list[DeviceAttributes]]],
+    gateways: list[tuple[GatewayAttributes, list[DeviceAttributes]]],
     id_token: str,
     access_token: str,
 ):
@@ -65,16 +69,16 @@ async def test_get_gateways(
                     "name": attributes.name,
                     "occupants_permissions": {
                         "receiver_occupant": {
-                            "id": str(occupant.id),
-                            "email": occupant.email,
-                            "first_name": occupant.first_name,
-                            "last_name": occupant.last_name,
-                            "identity_id": occupant.identity_id,
+                            "id": str(attributes.occupant.id),
+                            "email": attributes.occupant.email,
+                            "first_name": attributes.occupant.first_name,
+                            "last_name": attributes.occupant.last_name,
+                            "identity_id": attributes.occupant.identity_id,
                         }
                     },
                 },
             }
-            for (attributes, occupant, _) in gateways
+            for (attributes, _) in gateways
         ]
 
         service_api.get_slider_list.return_value = {"data": slider_list_data}
@@ -92,7 +96,7 @@ async def test_get_gateways(
                                 "model": item.model,
                                 "name": item.name,
                             }
-                            for item in gateways[i][2]
+                            for item in gateways[i][1]
                         ),
                     ],
                 }
@@ -106,14 +110,14 @@ async def test_get_gateways(
         service_api.get_slider_details.side_effect = get_slider_details_impl
 
         async with create_client("user", "password") as client:
-            for expected_gateway, actual_gateway in zip(
-                gateways, client.get_gateways()
-            ):
-                assert actual_gateway.get_attributes() == expected_gateway[0]
-                assert actual_gateway.get_occupant() == expected_gateway[1]
+            for (
+                expected_attributes,
+                expected_children_attributes,
+            ), actual_gateway in zip(gateways, client.get_gateways()):
+                assert actual_gateway.get_attributes() == expected_attributes
                 assert [
-                    device.get_attributes() for device in actual_gateway.get_devices()
-                ] == expected_gateway[2]
+                    device.get_attributes() for device in actual_gateway.get_children()
+                ] == expected_children_attributes
 
         aws.authenticate.assert_awaited()
         service_api.get_slider_list.assert_awaited_with(

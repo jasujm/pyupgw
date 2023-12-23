@@ -1,13 +1,14 @@
 """Main client code"""
 
+from collections.abc import Iterable
 import uuid
 import contextlib
 
 import aiohttp
+import attrs
 
 from ._api import AwsApi, ServiceApi
-from .models import DeviceType, DeviceAttributes, Occupant
-from .gateway import Gateway
+from .models import DeviceType, DeviceAttributes, GatewayAttributes, Device, Occupant
 
 
 def _parse_device_attributes(data, type_):
@@ -20,7 +21,7 @@ def _parse_device_attributes(data, type_):
     )
 
 
-def _parse_gateway_attributes_and_occupant(data):
+def _parse_gateway_attributes(data):
     gateway_data = data["gateway"]
     attributes = _parse_device_attributes(gateway_data, DeviceType.GATEWAY)
     occupant_data = gateway_data["occupants_permissions"]["receiver_occupant"]
@@ -31,7 +32,7 @@ def _parse_gateway_attributes_and_occupant(data):
         last_name=str(occupant_data["last_name"]),
         identity_id=str(occupant_data["identity_id"]),
     )
-    return attributes, occupant
+    return GatewayAttributes(**attrs.asdict(attributes), occupant=occupant)
 
 
 def _parse_devices(data):
@@ -41,6 +42,35 @@ def _parse_devices(data):
         # the gateway itself appears under items, but let's exclude it
         elif "device_code" in item_data and "occupants_permissions" not in item_data:
             yield _parse_device_attributes(item_data, DeviceType.DEVICE)
+
+
+async def _construct_client_data(id_token: str, access_token: str):
+    service_api = _create_service_api()
+    gateways = []
+    async with aiohttp.ClientSession() as aiohttp_session:
+        slider_list = await service_api.get_slider_list(
+            id_token, access_token, aiohttp_session
+        )
+        for gateway_data in slider_list["data"]:
+            if gateway_data.get("type") == "gateway":
+                attributes = _parse_gateway_attributes(gateway_data)
+                slider_details = await service_api.get_slider_details(
+                    str(attributes.id),
+                    attributes.type.value,
+                    id_token,
+                    access_token,
+                    aiohttp_session,
+                )
+                gateways.append(
+                    Device(
+                        attributes,
+                        [
+                            Device(attrs)
+                            for attrs in _parse_devices(slider_details["data"])
+                        ],
+                    )
+                )
+    return gateways
 
 
 def _create_aws_api(username: str):
@@ -61,14 +91,14 @@ class Client:
     :func:`create_client()` context manager.
     """
 
-    def __init__(self, gateways: list[Gateway]):
+    def __init__(self, gateways: Iterable[Device]):
         """
         Parameters:
           gateways: managed gateways
         """
-        self._gateways = gateways
+        self._gateways = list(gateways)
 
-    def get_gateways(self):
+    def get_gateways(self) -> list[Device]:
         """Get the managed gateways"""
         return self._gateways
 
@@ -88,27 +118,5 @@ async def create_client(username: str, password: str):
 
     aws = _create_aws_api(username)
     id_token, access_token = await aws.authenticate(password)
-    service_api = _create_service_api()
-    gateways = []
-    async with aiohttp.ClientSession() as aiohttp_session:
-        slider_list = await service_api.get_slider_list(
-            id_token, access_token, aiohttp_session
-        )
-        for gateway_data in slider_list["data"]:
-            if gateway_data.get("type") == "gateway":
-                attributes, occupant = _parse_gateway_attributes_and_occupant(
-                    gateway_data
-                )
-                slider_details = await service_api.get_slider_details(
-                    str(attributes.id),
-                    attributes.type.value,
-                    id_token,
-                    access_token,
-                    aiohttp_session,
-                )
-                gateways.append(
-                    Gateway(
-                        attributes, occupant, _parse_devices(slider_details["data"])
-                    )
-                )
+    gateways = await _construct_client_data(id_token, access_token)
     yield Client(gateways)

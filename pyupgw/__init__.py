@@ -10,4 +10,6 @@ from .models import (
     GatewayAttributes,
     IotDeviceAttributes,
     Occupant,
+    SystemMode,
+    ThermostatAttributes,
 )

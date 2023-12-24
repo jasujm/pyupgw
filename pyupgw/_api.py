@@ -10,17 +10,22 @@ used directly.  Breaking changes may be introduced between minor versions.
 import asyncio
 import contextlib
 import typing
+import uuid
 from collections.abc import Awaitable
 
 import aiohttp
 from awscrt.auth import AwsCredentialsProvider
 from awscrt.io import ClientTlsContext, TlsContextOptions
+from awsiot.iotshadow import IotShadowClient
+from awsiot.mqtt_connection_builder import websockets_with_default_aws_signing
 from pycognito import Cognito
 
 PYUPGW_AWS_CLIENT_ID = "63qkc36u3eje4lp8ums9njmarv"
+PYUPGW_AWS_REGION = "eu-central-1"
 PYUPGW_AWS_USER_POOL_ID = "eu-central-1_HfciXliKM"
 PYUPGW_AWS_ID_PROVIDER = "cognito-idp.eu-central-1.amazonaws.com/eu-central-1_HfciXliKM"
 PYUPGW_AWS_IDENTITY_ENDPOINT = "cognito-identity.eu-central-1.amazonaws.com"
+PYUPGW_AWS_IOT_ENDPOINT = "a1b4blxx3o9kj3-ats.iot.eu-central-1.amazonaws.com"
 PYUPGW_SERVICE_API_BASE_URL = "https://service-api.purmo.uleeco.com/api/v1"
 PYUPGW_SERVICE_API_COMPANY = "purmo"
 
@@ -33,13 +38,17 @@ class AwsApi:
     def __init__(
         self,
         username: str,
+        region: str | None = None,
         client_id: str | None = None,
         user_pool_id: str | None = None,
         id_provider: str | None = None,
         identity_endpoint: str | None = None,
+        iot_endpoint: str | None = None,
     ):
+        self._region = region or PYUPGW_AWS_REGION
         self._id_provider = id_provider or PYUPGW_AWS_ID_PROVIDER
         self._identity_endpoint = identity_endpoint or PYUPGW_AWS_IDENTITY_ENDPOINT
+        self._iot_endpoint = iot_endpoint or PYUPGW_AWS_IOT_ENDPOINT
         self._cognito = Cognito(
             user_pool_id=user_pool_id or PYUPGW_AWS_USER_POOL_ID,
             client_id=client_id or PYUPGW_AWS_CLIENT_ID,
@@ -63,6 +72,23 @@ class AwsApi:
             logins=[(self._id_provider, self._cognito.id_token)],
             tls_ctx=_tls_ctx,
         )
+
+    async def get_iot_shadow_client(
+        self,
+        device_code: str,
+        credentials_provider: AwsCredentialsProvider,
+    ):
+        """Get shadow client for a device"""
+        mqtt_connection = websockets_with_default_aws_signing(
+            endpoint=self._iot_endpoint,
+            region=self._region,
+            credentials_provider=credentials_provider,
+            client_id=f"{device_code}-{uuid.uuid4()}",
+            clean_session=True,
+            keep_alive_secs=30,
+        )
+        await asyncio.wrap_future(mqtt_connection.connect())
+        return IotShadowClient(mqtt_connection)
 
 
 class ServiceApi:

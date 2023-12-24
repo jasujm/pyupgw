@@ -1,99 +1,167 @@
 """Tests for the UPGW client"""
 
+# pylint: disable=redefined-outer-name
+
+import asyncio
+import contextlib
 import unittest.mock
+from concurrent.futures import Future
 
 import pytest
-from attrs import define, field
-from hypothesis import given
+from attrs import define
+from awsiot.iotshadow import GetShadowResponse, ShadowStateWithDelta
+from hypothesis import assume, given
 from hypothesis import strategies as st
 
 import pyupgw.client
-from pyupgw import DeviceType, GatewayAttributes, IotDeviceAttributes, create_client
+from pyupgw import GatewayAttributes, SystemMode, ThermostatAttributes, create_client
+
+ID_TOKEN = "id_token"
+ACCESS_TOKEN = "access_token"
+USERNAME = "username"
+PASSWORD = "password"
 
 
-def _mock_aws(monkeypatch):
-    @define
-    class _MockAws:
-        authenticate = field(default=unittest.mock.AsyncMock())
+GatewayData = tuple[GatewayAttributes, list[ThermostatAttributes]]
 
-    ret = _MockAws()
-    monkeypatch.setattr(pyupgw.client, "_create_aws_api", lambda username: ret)
-    return ret
+gateway_data = st.tuples(
+    st.builds(GatewayAttributes),
+    st.lists(
+        st.builds(
+            ThermostatAttributes,
+            system_mode=st.none(),
+            temperature=st.none(),
+            current_temperature=st.none(),
+            min_temp=st.none(),
+            max_temp=st.none(),
+        )
+    ),
+)
 
 
-def _mock_service_api(monkeypatch):
-    @define
-    class _MockServiceApi:
-        get_slider_list = field(default=unittest.mock.AsyncMock())
-        get_slider_details = field(default=unittest.mock.AsyncMock())
+@define
+class _MockAws:
+    authenticate: unittest.mock.AsyncMock
+    get_credentials_provider: unittest.mock.Mock
+    get_iot_shadow_client: unittest.mock.AsyncMock
 
-    ret = _MockServiceApi()
+
+@define
+class _MockShadowClient:
+    subscribe_to_get_shadow_accepted: unittest.mock.Mock
+    publish_get_shadow: unittest.mock.Mock
+    mqtt_connection: unittest.mock.MagicMock
+
+
+def _instant_future(result):
+    future = Future()
+    future.set_result(result)
+    return future
+
+
+def _mock_aws(monkeypatch) -> tuple[_MockAws, _MockShadowClient]:
+    mock_shadow_client = _MockShadowClient(
+        subscribe_to_get_shadow_accepted=unittest.mock.Mock(
+            side_effect=lambda *_, **__: (_instant_future(None), 0)
+        ),
+        publish_get_shadow=unittest.mock.Mock(
+            side_effect=lambda *_, **__: _instant_future(None)
+        ),
+        mqtt_connection=unittest.mock.MagicMock(),
+    )
+    mock_shadow_client.mqtt_connection.disconnect.side_effect = lambda: _instant_future(
+        None
+    )
+    mock_aws = _MockAws(
+        authenticate=unittest.mock.AsyncMock(return_value=(ID_TOKEN, ACCESS_TOKEN)),
+        get_credentials_provider=unittest.mock.Mock(return_value=object()),
+        get_iot_shadow_client=unittest.mock.AsyncMock(return_value=mock_shadow_client),
+    )
+    monkeypatch.setattr(pyupgw.client, "_create_aws_api", lambda username: mock_aws)
+    return mock_aws, mock_shadow_client
+
+
+@define
+class _MockServiceApi:
+    get_slider_list: unittest.mock.AsyncMock
+    get_slider_details: unittest.mock.AsyncMock
+
+
+def _mock_service_api(monkeypatch, gateways: list[GatewayData]) -> _MockServiceApi:
+    slider_list_data = [
+        {
+            "id": str(attributes.id),
+            "type": attributes.type.value,
+            "gateway": {
+                "id": str(attributes.id),
+                "device_code": attributes.device_code,
+                "model": attributes.model,
+                "name": attributes.name,
+                "occupants_permissions": {
+                    "receiver_occupant": {
+                        "id": str(attributes.occupant.id),
+                        "identity_id": attributes.occupant.identity_id,
+                    }
+                },
+            },
+        }
+        for (attributes, _) in gateways
+    ]
+
+    slider_details_map = {
+        slider_data["id"]: {
+            "data": {
+                **slider_data,
+                "items": [
+                    slider_data["gateway"],
+                    *(
+                        {
+                            "id": str(item.id),
+                            "device_code": item.device_code,
+                            "model": item.model,
+                            "name": item.name,
+                        }
+                        for item in gateways[i][1]
+                    ),
+                ],
+            }
+        }
+        for (i, slider_data) in enumerate(slider_list_data)
+    }
+
+    def get_slider_details_impl(slider_id, *_, **__):
+        return slider_details_map[str(slider_id)]
+
+    ret = _MockServiceApi(
+        get_slider_list=unittest.mock.AsyncMock(
+            return_value={"data": slider_list_data}
+        ),
+        get_slider_details=unittest.mock.AsyncMock(side_effect=get_slider_details_impl),
+    )
     monkeypatch.setattr(pyupgw.client, "_create_service_api", lambda: ret)
+
     return ret
+
+
+@pytest.fixture(scope="session")
+def client_setup():
+    """Context manager to setup low level clients"""
+
+    @contextlib.contextmanager
+    def context(gateways: list[GatewayData]):
+        with pytest.MonkeyPatch().context() as m:
+            aws, shadow_client = _mock_aws(m)
+            service_api = _mock_service_api(m, gateways)
+            yield aws, service_api, shadow_client
+
+    return context
 
 
 @pytest.mark.asyncio
-@given(...)
-async def test_get_gateways(
-    gateways: list[tuple[GatewayAttributes, list[IotDeviceAttributes]]],
-    id_token: str,
-    access_token: str,
-):
-    with pytest.MonkeyPatch().context() as monkeypatch:
-        aws = _mock_aws(monkeypatch)
-        service_api = _mock_service_api(monkeypatch)
-
-        aws.authenticate.return_value = (id_token, access_token)
-
-        slider_list_data = [
-            {
-                "id": str(attributes.id),
-                "type": attributes.type.value,
-                "gateway": {
-                    "id": str(attributes.id),
-                    "device_code": attributes.device_code,
-                    "model": attributes.model,
-                    "name": attributes.name,
-                    "occupants_permissions": {
-                        "receiver_occupant": {
-                            "id": str(attributes.occupant.id),
-                            "identity_id": attributes.occupant.identity_id,
-                        }
-                    },
-                },
-            }
-            for (attributes, _) in gateways
-        ]
-
-        service_api.get_slider_list.return_value = {"data": slider_list_data}
-
-        slider_details_map = {
-            slider_data["id"]: {
-                "data": {
-                    **slider_data,
-                    "items": [
-                        slider_data["gateway"],
-                        *(
-                            {
-                                "id": str(item.id),
-                                "device_code": item.device_code,
-                                "model": item.model,
-                                "name": item.name,
-                            }
-                            for item in gateways[i][1]
-                        ),
-                    ],
-                }
-            }
-            for (i, slider_data) in enumerate(slider_list_data)
-        }
-
-        def get_slider_details_impl(slider_id, *_, **__):
-            return slider_details_map[str(slider_id)]
-
-        service_api.get_slider_details.side_effect = get_slider_details_impl
-
-        async with create_client("user", "password") as client:
+@given(gateways=st.lists(gateway_data))
+async def test_get_gateways(gateways: list[GatewayData], client_setup):
+    with client_setup(gateways) as (aws, service_api, _):
+        async with create_client(USERNAME, PASSWORD) as client:
             for (
                 expected_attributes,
                 expected_children_attributes,
@@ -103,7 +171,94 @@ async def test_get_gateways(
                     device.get_attributes() for device in actual_gateway.get_children()
                 ] == expected_children_attributes
 
-        aws.authenticate.assert_awaited()
-        service_api.get_slider_list.assert_awaited_with(
-            id_token, access_token, unittest.mock.ANY
+        aws.authenticate.assert_awaited_once()
+        service_api.get_slider_list.assert_awaited_once_with(
+            ID_TOKEN, ACCESS_TOKEN, unittest.mock.ANY
         )
+        for expected_attributes, _ in gateways:
+            service_api.get_slider_details.assert_any_await(
+                str(expected_attributes.id),
+                expected_attributes.type.value,
+                ID_TOKEN,
+                ACCESS_TOKEN,
+                unittest.mock.ANY,
+            )
+
+
+@pytest.mark.asyncio
+@given(
+    gateway_data=gateway_data,
+    update_replies=st.lists(
+        st.tuples(
+            st.sampled_from(SystemMode),
+            st.integers(0, 1000),
+            st.integers(0, 1000),
+            st.integers(0, 1000),
+            st.integers(0, 1000),
+        )
+    ),
+)
+async def test_refresh_state(gateway_data: GatewayData, update_replies, client_setup):
+    assume(len(gateway_data[1]) == len(update_replies))
+    with client_setup([gateway_data]) as (aws, _, shadow_client):
+        async with create_client(USERNAME, PASSWORD) as client:
+            gateway = client.get_gateways()[0]
+            await client.refresh_states()
+            for subscribe_call, device, update_reply in zip(
+                shadow_client.subscribe_to_get_shadow_accepted.call_args_list,
+                gateway.get_children(),
+                update_replies,
+            ):
+                update_event = asyncio.Event()
+                notify_update = unittest.mock.Mock(
+                    side_effect=lambda *_: update_event.set()  # pylint: disable=cell-var-from-loop
+                )
+                device.subscribe_device_changes(notify_update)
+                update_callback = subscribe_call.args[2]
+                update_callback(
+                    GetShadowResponse(
+                        state=ShadowStateWithDelta(
+                            reported={
+                                "11": {
+                                    "properties": {
+                                        "ep1:sTherS:RunningMode": update_reply[0].value,
+                                        "ep1:sTherS:HeatingSetpoint_x100": update_reply[
+                                            1
+                                        ],
+                                        "ep1:sTherS:LocalTemperature_x100": update_reply[
+                                            2
+                                        ],
+                                        "ep1:sTherS:MinHeatSetpoint_x100": update_reply[
+                                            3
+                                        ],
+                                        "ep1:sTherS:MaxHeatSetpoint_x100": update_reply[
+                                            4
+                                        ],
+                                    }
+                                }
+                            }
+                        )
+                    )
+                )
+                await update_event.wait()
+                device.unsubscribe_device_changes(notify_update)
+                notify_update.assert_called()
+                attributes = device.get_attributes()
+                assert (
+                    attributes.system_mode,
+                    round(attributes.temperature * 100),
+                    round(attributes.current_temperature * 100),
+                    round(attributes.min_temp * 100),
+                    round(attributes.max_temp * 100),
+                ) == update_reply
+
+        aws.get_credentials_provider.assert_called_with(
+            gateway.get_attributes().occupant.identity_id
+        )
+        aws.get_iot_shadow_client.assert_called()
+        if gateway.get_children():
+            shadow_client.subscribe_to_get_shadow_accepted.assert_called()
+            shadow_client.publish_get_shadow.assert_called()
+        else:
+            shadow_client.subscribe_to_get_shadow_accepted.assert_not_called()
+            shadow_client.publish_get_shadow.assert_not_called()

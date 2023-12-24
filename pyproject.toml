@@ -13,6 +13,7 @@ dependencies = [
   "awscrt",
   "awsiotsdk>=1,<2",
   "attrs",
+  "dict-deep",
 ]
 
 [project.optional-dependencies]

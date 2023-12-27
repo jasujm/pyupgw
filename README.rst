@@ -8,7 +8,7 @@ service. ``pyupgw`` is a python client for that cloud service.
 Goals
 -----
 
-The main reason for this project is to develop `Home Assistant
+The main reason for this project is to (eventually) develop `Home Assistant
 <https://www.home-assistant.io/>`_ integration for the Unisenza Plus Gateway.
 
 The client library is intended to give a robust and simplified interface to the

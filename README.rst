@@ -42,5 +42,5 @@ Contributing
 ------------
 
 This project is still in early stages. Please open an issue or PR in the `Github
-<https://github.com/jasujm/pyupgq>`_ repository if you want to get in touch with
+<https://github.com/jasujm/pyupgw>`_ repository if you want to get in touch with
 questions or contributions.

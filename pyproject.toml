@@ -26,6 +26,7 @@ dependencies = [
   "awsiotsdk>=1,<2",
   "attrs",
   "dict-deep",
+  "python-dotenv",
 ]
 requires-python=">=3.10"
 

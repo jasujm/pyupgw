@@ -9,6 +9,7 @@ used directly.  Breaking changes may be introduced between minor versions.
 
 import asyncio
 import contextlib
+import os
 import typing
 import uuid
 from collections.abc import Awaitable
@@ -18,16 +19,19 @@ from awscrt.auth import AwsCredentialsProvider
 from awscrt.io import ClientTlsContext, TlsContextOptions
 from awsiot.iotshadow import IotShadowClient
 from awsiot.mqtt_connection_builder import websockets_with_default_aws_signing
+from dotenv import load_dotenv
 from pycognito import Cognito
 
-PYUPGW_AWS_CLIENT_ID = "63qkc36u3eje4lp8ums9njmarv"
-PYUPGW_AWS_REGION = "eu-central-1"
-PYUPGW_AWS_USER_POOL_ID = "eu-central-1_HfciXliKM"
-PYUPGW_AWS_ID_PROVIDER = "cognito-idp.eu-central-1.amazonaws.com/eu-central-1_HfciXliKM"
-PYUPGW_AWS_IDENTITY_ENDPOINT = "cognito-identity.eu-central-1.amazonaws.com"
-PYUPGW_AWS_IOT_ENDPOINT = "a1b4blxx3o9kj3-ats.iot.eu-central-1.amazonaws.com"
-PYUPGW_SERVICE_API_BASE_URL = "https://service-api.purmo.uleeco.com/api/v1"
-PYUPGW_SERVICE_API_COMPANY = "purmo"
+load_dotenv()
+
+PYUPGW_AWS_CLIENT_ID = os.getenv("PYUPGW_AWS_CLIENT_ID")
+PYUPGW_AWS_REGION = os.getenv("PYUPGW_AWS_REGION")
+PYUPGW_AWS_USER_POOL_ID = os.getenv("PYUPGW_AWS_USER_POOL_ID")
+PYUPGW_AWS_ID_PROVIDER = os.getenv("PYUPGW_AWS_ID_PROVIDER")
+PYUPGW_AWS_IDENTITY_ENDPOINT = os.getenv("PYUPGW_AWS_IDENTITY_ENDPOINT")
+PYUPGW_AWS_IOT_ENDPOINT = os.getenv("PYUPGW_AWS_IOT_ENDPOINT")
+PYUPGW_SERVICE_API_BASE_URL = os.getenv("PYUPGW_SERVICE_API_BASE_URL")
+PYUPGW_SERVICE_API_COMPANY = os.getenv("PYUPGW_SERVICE_API_COMPANY")
 
 _tls_ctx = ClientTlsContext(TlsContextOptions())
 

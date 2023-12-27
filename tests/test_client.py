@@ -49,7 +49,9 @@ class _MockAws:
 @define
 class _MockShadowClient:
     subscribe_to_get_shadow_accepted: unittest.mock.Mock
+    subscribe_to_update_shadow_accepted: unittest.mock.Mock
     publish_get_shadow: unittest.mock.Mock
+    publish_update_shadow: unittest.mock.Mock
     mqtt_connection: unittest.mock.MagicMock
 
 
@@ -64,7 +66,13 @@ def _mock_aws(monkeypatch) -> tuple[_MockAws, _MockShadowClient]:
         subscribe_to_get_shadow_accepted=unittest.mock.Mock(
             side_effect=lambda *_, **__: (_instant_future(None), 0)
         ),
+        subscribe_to_update_shadow_accepted=unittest.mock.Mock(
+            side_effect=lambda *_, **__: (_instant_future(None), 0)
+        ),
         publish_get_shadow=unittest.mock.Mock(
+            side_effect=lambda *_, **__: _instant_future(None)
+        ),
+        publish_update_shadow=unittest.mock.Mock(
             side_effect=lambda *_, **__: _instant_future(None)
         ),
         mqtt_connection=unittest.mock.MagicMock(),
@@ -189,12 +197,14 @@ async def test_get_gateways(gateways: list[GatewayData], client_setup):
 @given(
     gateway_data=gateway_data,
     update_replies=st.lists(
-        st.tuples(
-            st.sampled_from(SystemMode),
-            st.integers(0, 1000),
-            st.integers(0, 1000),
-            st.integers(0, 1000),
-            st.integers(0, 1000),
+        st.fixed_dictionaries(
+            {
+                "system_mode": st.sampled_from(SystemMode),
+                "temperature": st.floats(5.0, 30.0).map(lambda v: round(v, 2)),
+                "current_temperature": st.floats(5.0, 30.0).map(lambda v: round(v, 2)),
+                "min_temp": st.floats(5.0, 30.0).map(lambda v: round(v, 2)),
+                "max_temp": st.floats(5.0, 30.0).map(lambda v: round(v, 2)),
+            }
         )
     ),
 )
@@ -221,19 +231,21 @@ async def test_refresh_state(gateway_data: GatewayData, update_replies, client_s
                             reported={
                                 "11": {
                                     "properties": {
-                                        "ep1:sTherS:RunningMode": update_reply[0].value,
-                                        "ep1:sTherS:HeatingSetpoint_x100": update_reply[
-                                            1
-                                        ],
-                                        "ep1:sTherS:LocalTemperature_x100": update_reply[
-                                            2
-                                        ],
-                                        "ep1:sTherS:MinHeatSetpoint_x100": update_reply[
-                                            3
-                                        ],
-                                        "ep1:sTherS:MaxHeatSetpoint_x100": update_reply[
-                                            4
-                                        ],
+                                        "ep1:sTherS:RunningMode": update_reply[
+                                            "system_mode"
+                                        ].value,
+                                        "ep1:sTherS:HeatingSetpoint_x100": round(
+                                            update_reply["temperature"] * 100
+                                        ),
+                                        "ep1:sTherS:LocalTemperature_x100": round(
+                                            update_reply["current_temperature"] * 100
+                                        ),
+                                        "ep1:sTherS:MinHeatSetpoint_x100": round(
+                                            update_reply["min_temp"] * 100
+                                        ),
+                                        "ep1:sTherS:MaxHeatSetpoint_x100": round(
+                                            update_reply["max_temp"] * 100
+                                        ),
                                     }
                                 }
                             }
@@ -244,13 +256,13 @@ async def test_refresh_state(gateway_data: GatewayData, update_replies, client_s
                 device.unsubscribe_device_changes(notify_update)
                 notify_update.assert_called()
                 attributes = device.get_attributes()
-                assert (
-                    attributes.system_mode,
-                    round(attributes.temperature * 100),
-                    round(attributes.current_temperature * 100),
-                    round(attributes.min_temp * 100),
-                    round(attributes.max_temp * 100),
-                ) == update_reply
+                assert {
+                    "system_mode": attributes.system_mode,
+                    "temperature": attributes.temperature,
+                    "current_temperature": attributes.current_temperature,
+                    "min_temp": attributes.min_temp,
+                    "max_temp": attributes.max_temp,
+                } == update_reply
 
         aws.get_credentials_provider.assert_called_with(
             gateway.get_attributes().occupant.identity_id
@@ -262,3 +274,56 @@ async def test_refresh_state(gateway_data: GatewayData, update_replies, client_s
         else:
             shadow_client.subscribe_to_get_shadow_accepted.assert_not_called()
             shadow_client.publish_get_shadow.assert_not_called()
+
+
+@pytest.mark.asyncio
+@given(
+    gateway_data=gateway_data,
+    update_requests=st.lists(
+        st.fixed_dictionaries(
+            {
+                "system_mode": st.sampled_from(SystemMode),
+                "temperature": st.floats(5.0, 30.0).map(lambda v: round(v, 2)),
+            }
+        )
+    ),
+)
+async def test_device_update(gateway_data: GatewayData, update_requests, client_setup):
+    assume(len(gateway_data[1]) == len(update_requests))
+    with client_setup([gateway_data]) as (aws, _, shadow_client):
+        async with create_client(USERNAME, PASSWORD) as client:
+            gateway = client.get_gateways()[0]
+            for device, update_request in zip(
+                gateway.get_children(),
+                update_requests,
+            ):
+                await client.request_device_update(
+                    gateway,
+                    device.get_device_code(),
+                    update_request,
+                )
+                shadow_client.publish_update_shadow.assert_called()
+                actual_request = shadow_client.publish_update_shadow.call_args.args[0]
+                desired_properties = {}
+                if "temperature" in update_request:
+                    desired_properties["ep1:sTherS:SetHeatingSetpoint_x100"] = round(
+                        update_request["temperature"] * 100
+                    )
+                if "system_mode" in update_request:
+                    desired_properties["ep1:sTherS:SetSystemMode"] = update_request[
+                        "system_mode"
+                    ].value
+                assert actual_request.state.desired == {
+                    "11": {"properties": desired_properties}
+                }
+
+        if gateway.get_children():
+            aws.get_iot_shadow_client.assert_called()
+            aws.get_credentials_provider.assert_called_with(
+                gateway.get_attributes().occupant.identity_id
+            )
+            shadow_client.subscribe_to_update_shadow_accepted.assert_called()
+            shadow_client.publish_update_shadow.assert_called()
+        else:
+            shadow_client.subscribe_to_update_shadow_accepted.assert_not_called()
+            shadow_client.publish_update_shadow.assert_not_called()

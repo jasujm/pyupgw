@@ -15,6 +15,10 @@ from awsiot.iotshadow import (
     GetShadowResponse,
     GetShadowSubscriptionRequest,
     IotShadowClient,
+    ShadowState,
+    UpdateShadowRequest,
+    UpdateShadowResponse,
+    UpdateShadowSubscriptionRequest,
 )
 from dict_deep import deep_get
 
@@ -62,7 +66,7 @@ def _parse_devices(data):
             )
 
 
-SHADOW_TO_ATTRIBUTES_MAP: list[tuple[str, str, Callable[[str], typing.Any]]] = [
+_SHADOW_TO_ATTRIBUTES_MAP: list[tuple[str, str, Callable[[typing.Any], typing.Any]]] = [
     ("temperature", "ep1:sTherS:HeatingSetpoint_x100", lambda v: float(v) / 100),
     (
         "current_temperature",
@@ -77,7 +81,7 @@ SHADOW_TO_ATTRIBUTES_MAP: list[tuple[str, str, Callable[[str], typing.Any]]] = [
 
 def _parse_shadow_attributes(shadow_state: dict[str, typing.Any]):
     ret = {}
-    for attr_key, shadow_key, transform in SHADOW_TO_ATTRIBUTES_MAP:
+    for attr_key, shadow_key, transform in _SHADOW_TO_ATTRIBUTES_MAP:
         if (
             value := deep_get(shadow_state, ["11", "properties", shadow_key])
         ) is not None:
@@ -91,6 +95,24 @@ def _parse_shadow_attributes(shadow_state: dict[str, typing.Any]):
                     exc_info=ex,
                 )
     return ret
+
+
+_ATTRIBUTES_TO_SHADOW_MAP: list[tuple[str, str, Callable[[typing.Any], typing.Any]]] = [
+    (
+        "temperature",
+        "ep1:sTherS:SetHeatingSetpoint_x100",
+        lambda v: int(round(v * 100)),
+    ),
+    ("system_mode", "ep1:sTherS:SetSystemMode", lambda v: v.value),
+]
+
+
+def _create_shadow_update_attributes(changes: dict[str, typing.Any]):
+    desired_properties: dict[str, typing.Any] = {}
+    for attr_key, shadow_key, transform in _ATTRIBUTES_TO_SHADOW_MAP:
+        if (value := changes.get(attr_key)) is not None:
+            desired_properties[shadow_key] = transform(value)
+    return ShadowState(desired={"11": {"properties": desired_properties}})
 
 
 async def _construct_client_data(id_token: str, access_token: str):
@@ -153,7 +175,7 @@ class _MqttClientManager(contextlib.AbstractAsyncContextManager):
         self._aws = aws
         self._credentials_store = credentials_store
         self._on_update_callbacks: list[
-            Callable[[str, str, GetShadowResponse], None]
+            Callable[[str, str, GetShadowResponse | UpdateShadowResponse], None]
         ] = []
         self._shadow_clients: dict[uuid.UUID, IotShadowClient] = {}
 
@@ -213,12 +235,19 @@ class _MqttClientManager(contextlib.AbstractAsyncContextManager):
                 device_code,
                 child_device_code,
             )
-            subscription_futures.append(
-                shadow_client.subscribe_to_get_shadow_accepted(
-                    GetShadowSubscriptionRequest(thing_name=child_device_code),
-                    QoS.AT_MOST_ONCE,
-                    bound_on_update,
-                )
+            subscription_futures.extend(
+                [
+                    shadow_client.subscribe_to_get_shadow_accepted(
+                        GetShadowSubscriptionRequest(thing_name=child_device_code),
+                        QoS.AT_MOST_ONCE,
+                        bound_on_update,
+                    ),
+                    shadow_client.subscribe_to_update_shadow_accepted(
+                        UpdateShadowSubscriptionRequest(thing_name=child_device_code),
+                        QoS.AT_MOST_ONCE,
+                        bound_on_update,
+                    ),
+                ]
             )
         await asyncio.gather(
             *(asyncio.wrap_future(future) for (future, _) in subscription_futures)
@@ -226,8 +255,18 @@ class _MqttClientManager(contextlib.AbstractAsyncContextManager):
         return shadow_client
 
     def _on_update_callback(
-        self, device_code: str, child_device_code: str, response: GetShadowResponse
+        self,
+        device_code: str,
+        child_device_code: str,
+        response: GetShadowResponse | UpdateShadowResponse,
     ):
+        logger.debug(
+            "Received shadow doc for %s in %s: %r",
+            child_device_code,
+            device_code,
+            response,
+            extra={"response": response},
+        )
         for callback in self._on_update_callbacks:
             callback(device_code, child_device_code, response)
 
@@ -281,29 +320,70 @@ class Client(contextlib.AbstractAsyncContextManager):
         use :func:`Device.subscribe_to_changes()`
         """
         for gateway in self._gateways:
-            children = gateway.get_children()
-            client = await self._mqtt_client_manager.client_for_gateway(
-                getattr(gateway.get_attributes(), "occupant"),
-                gateway.get_device_code(),
-                [child.get_device_code() for child in children],
-            )
+            client = await self._mqtt_client_for_gateway(gateway)
             publish_futures = []
-            for child in children:
+            for child in gateway.get_children():
+                request = GetShadowRequest(thing_name=child.get_device_code())
+                logger.debug(
+                    "Publishing get shadow request for %s: %r",
+                    child.get_device_code(),
+                    request,
+                    extra={"request": request},
+                )
                 publish_futures.append(
                     asyncio.wrap_future(
                         client.publish_get_shadow(
-                            GetShadowRequest(thing_name=child.get_device_code()),
+                            request,
                             QoS.AT_MOST_ONCE,
                         )
                     )
                 )
             await asyncio.gather(*publish_futures)
 
+    async def request_device_update(
+        self,
+        gateway: Device,
+        device_code: str,
+        changes: dict[str, typing.Any],
+    ):
+        """Request device state to be updated
+
+        The coroutine completes when the server has acknowledged the request to
+        get the states.  To get notified when the updated state is available,
+        use :func:`Device.subscribe_to_changes()`
+
+        Parameters:
+          gateway: the gateway the device is connected to
+          device_code: the device code of the updated device
+          changes: the changes to be published
+        """
+        client = await self._mqtt_client_for_gateway(gateway)
+        request = UpdateShadowRequest(
+            thing_name=device_code,
+            state=_create_shadow_update_attributes(changes),
+        )
+        logger.debug(
+            "Publishing update shadow request for %s: %r",
+            device_code,
+            request,
+            extra={"request": request},
+        )
+        await asyncio.wrap_future(
+            client.publish_update_shadow(request, QoS.AT_MOST_ONCE)
+        )
+
+    def _mqtt_client_for_gateway(self, gateway: Device):
+        return self._mqtt_client_manager.client_for_gateway(
+            getattr(gateway.get_attributes(), "occupant"),
+            gateway.get_device_code(),
+            [child.get_device_code() for child in gateway.get_children()],
+        )
+
     def _on_update_device(
         self,
         device_code: str,
         child_device_code: str,
-        response: GetShadowResponse,
+        response: GetShadowResponse | UpdateShadowResponse,
     ):
         for gateway in self._gateways:
             if gateway.get_device_code() == device_code:

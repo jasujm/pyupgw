@@ -282,11 +282,6 @@ class Client(contextlib.AbstractAsyncContextManager):
     """
 
     def __init__(self, aws: AwsApi, gateways: Iterable[Device]):
-        """
-        Parameters:
-          aws: AWS API that has been authenticated with an user
-          gateways: managed gateways
-        """
         self._exit_stack = contextlib.AsyncExitStack()
         self._aws = aws
         self._gateways = list(gateways)
@@ -295,7 +290,11 @@ class Client(contextlib.AbstractAsyncContextManager):
         self._exit_stack.push_async_exit(self._mqtt_client_manager)
 
     async def aclose(self):
-        """Release all resources acquired by the client"""
+        """Release all resources acquired by the client
+
+        This method is automatically called when the client is used as context
+        manager.
+        """
         await self._exit_stack.aclose()
 
     async def __aenter__(self):
@@ -312,12 +311,12 @@ class Client(contextlib.AbstractAsyncContextManager):
         """Get the managed gateways"""
         return self._gateways
 
-    async def refresh_states(self):
+    async def refresh_all_devices(self):
         """Refresh states of all managed devices
 
         The coroutine completes when the server has acknowledged the request to
         get the states.  To get notified when the updated state is available,
-        use :func:`Device.subscribe_to_changes()`
+        use :meth:`Device.subscribe()`
         """
         for gateway in self._gateways:
             client = await self._mqtt_client_for_gateway(gateway)
@@ -340,21 +339,21 @@ class Client(contextlib.AbstractAsyncContextManager):
                 )
             await asyncio.gather(*publish_futures)
 
-    async def request_device_update(
+    async def update_device_state(
         self,
         gateway: Device,
-        device_code: str,
+        device: Device,
         changes: dict[str, typing.Any],
     ):
-        """Request device state to be updated
+        """Update the state of a device managed by the client
 
         The coroutine completes when the server has acknowledged the request to
         get the states.  To get notified when the updated state is available,
-        use :func:`Device.subscribe_to_changes()`
+        use :meth:`Device.subscribe()`
 
-        Parameters:
+        Arguments:
           gateway: the gateway the device is connected to
-          device_code: the device code of the updated device
+          device: the device whose state is updated
           changes: the changes to be published
         """
         client = await self._mqtt_client_for_gateway(gateway)
@@ -364,7 +363,7 @@ class Client(contextlib.AbstractAsyncContextManager):
         )
         logger.debug(
             "Publishing update shadow request for %s: %r",
-            device_code,
+            device.get_device_code(),
             request,
             extra={"request": request},
         )
@@ -390,20 +389,23 @@ class Client(contextlib.AbstractAsyncContextManager):
                 for child in gateway.get_children():
                     if child.get_device_code() == child_device_code:
                         changes = _parse_shadow_attributes(response.state.reported)
-                        child.update_attributes(changes)
+                        child.set_attributes(changes)
 
 
 @contextlib.asynccontextmanager
 async def create_client(username: str, password: str):
     """Create Unisenza Plus Gateway client
 
-    This function is used as a context manager that initializes and manages
+    This function returns a context manager that initializes and manages
     resources for a :class:`Client` instance.
 
     .. code-block:: python
 
         async with create_client("user@example.com", "password") as client:
            ...  # use client
+
+    Arguments:
+      username, password: the credentials used to log into the cloud service
     """
 
     aws = _create_aws_api(username)

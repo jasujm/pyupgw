@@ -6,7 +6,19 @@ build-backend = "flit_core.buildapi"
 name = "pyupgw"
 authors = [{name = "Jaakko Moisio", email = "jaakko@moisio.fi"}]
 license = {file = "LICENSE"}
-classifiers = ["License :: OSI Approved :: MIT License"]
+classifiers = [
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Intended Audience :: Developers",
+  "Topic :: Internet",
+  "Topic :: Home Automation",
+  "Topic :: Software Development :: Libraries",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+]
 dynamic = ["version", "description"]
 dependencies = [
   "pycognito>=2023.5.0",
@@ -15,6 +27,7 @@ dependencies = [
   "attrs",
   "dict-deep",
 ]
+requires-python=">=3.10"
 
 [project.optional-dependencies]
 dev = [
@@ -25,6 +38,11 @@ dev = [
   "pytest>=7.4.3",
   "pytest-asyncio>=0.23.2",
   "hypothesis>=6.92.1",
+]
+
+doc = [
+  "sphinx>=7.2.6",
+  "sphinx-rtd-theme"
 ]
 
 [project.urls]

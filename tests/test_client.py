@@ -213,7 +213,7 @@ async def test_refresh_state(gateway_data: GatewayData, update_replies, client_s
     with client_setup([gateway_data]) as (aws, _, shadow_client):
         async with create_client(USERNAME, PASSWORD) as client:
             gateway = client.get_gateways()[0]
-            await client.refresh_states()
+            await client.refresh_all_devices()
             for subscribe_call, device, update_reply in zip(
                 shadow_client.subscribe_to_get_shadow_accepted.call_args_list,
                 gateway.get_children(),
@@ -223,7 +223,7 @@ async def test_refresh_state(gateway_data: GatewayData, update_replies, client_s
                 notify_update = unittest.mock.Mock(
                     side_effect=lambda *_: update_event.set()  # pylint: disable=cell-var-from-loop
                 )
-                device.subscribe_device_changes(notify_update)
+                device.subscribe(notify_update)
                 update_callback = subscribe_call.args[2]
                 update_callback(
                     GetShadowResponse(
@@ -253,7 +253,7 @@ async def test_refresh_state(gateway_data: GatewayData, update_replies, client_s
                     )
                 )
                 await update_event.wait()
-                device.unsubscribe_device_changes(notify_update)
+                device.unsubscribe(notify_update)
                 notify_update.assert_called()
                 attributes = device.get_attributes()
                 assert {
@@ -297,11 +297,7 @@ async def test_device_update(gateway_data: GatewayData, update_requests, client_
                 gateway.get_children(),
                 update_requests,
             ):
-                await client.request_device_update(
-                    gateway,
-                    device.get_device_code(),
-                    update_request,
-                )
+                await client.update_device_state(gateway, device, update_request)
                 shadow_client.publish_update_shadow.assert_called()
                 actual_request = shadow_client.publish_update_shadow.call_args.args[0]
                 desired_properties = {}

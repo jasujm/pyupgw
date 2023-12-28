@@ -7,9 +7,10 @@ from .models import (
     Device,
     DeviceAttributes,
     DeviceType,
+    Gateway,
     GatewayAttributes,
-    IotDeviceAttributes,
     Occupant,
     SystemMode,
     ThermostatAttributes,
+    ThermostatDevice,
 )

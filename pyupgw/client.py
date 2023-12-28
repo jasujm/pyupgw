@@ -24,12 +24,13 @@ from dict_deep import deep_get
 
 from ._api import AwsApi, AwsCredentialsProvider, ServiceApi
 from .models import (
-    Device,
     DeviceType,
+    Gateway,
     GatewayAttributes,
     Occupant,
     SystemMode,
     ThermostatAttributes,
+    ThermostatDevice,
 )
 
 logger = logging.getLogger(__name__)
@@ -55,10 +56,10 @@ def _parse_gateway_attributes(data):
     return GatewayAttributes(type=DeviceType.GATEWAY, **attributes, occupant=occupant)
 
 
-def _parse_devices(data):
+def _parse_thermostat_devices(data):
     for item_data in data["items"]:
         if "items" in item_data:
-            yield from _parse_devices(item_data)
+            yield from _parse_thermostat_devices(item_data)
         # the gateway itself appears under items, but let's exclude it
         elif "device_code" in item_data and "occupants_permissions" not in item_data:
             yield ThermostatAttributes(
@@ -133,11 +134,13 @@ async def _construct_client_data(id_token: str, access_token: str):
                     aiohttp_session,
                 )
                 gateways.append(
-                    Device(
+                    Gateway(
                         attributes,
                         [
-                            Device(attrs)
-                            for attrs in _parse_devices(slider_details["data"])
+                            ThermostatDevice(attrs)
+                            for attrs in _parse_thermostat_devices(
+                                slider_details["data"]
+                            )
                         ],
                     )
                 )
@@ -281,7 +284,7 @@ class Client(contextlib.AbstractAsyncContextManager):
     :func:`create_client()` context manager.
     """
 
-    def __init__(self, aws: AwsApi, gateways: Iterable[Device]):
+    def __init__(self, aws: AwsApi, gateways: Iterable[Gateway]):
         self._exit_stack = contextlib.AsyncExitStack()
         self._aws = aws
         self._gateways = list(gateways)
@@ -307,7 +310,7 @@ class Client(contextlib.AbstractAsyncContextManager):
     async def __aexit__(self, exc_type, exc_value, traceback):
         await self.aclose()
 
-    def get_gateways(self) -> list[Device]:
+    def get_gateways(self) -> list[Gateway]:
         """Get the managed gateways"""
         return self._gateways
 
@@ -341,8 +344,8 @@ class Client(contextlib.AbstractAsyncContextManager):
 
     async def update_device_state(
         self,
-        gateway: Device,
-        device: Device,
+        gateway: Gateway,
+        device: ThermostatDevice,
         changes: dict[str, typing.Any],
     ):
         """Update the state of a device managed by the client
@@ -358,7 +361,7 @@ class Client(contextlib.AbstractAsyncContextManager):
         """
         client = await self._mqtt_client_for_gateway(gateway)
         request = UpdateShadowRequest(
-            thing_name=device_code,
+            thing_name=device.get_device_code(),
             state=_create_shadow_update_attributes(changes),
         )
         logger.debug(
@@ -371,9 +374,9 @@ class Client(contextlib.AbstractAsyncContextManager):
             client.publish_update_shadow(request, QoS.AT_MOST_ONCE)
         )
 
-    def _mqtt_client_for_gateway(self, gateway: Device):
+    def _mqtt_client_for_gateway(self, gateway: Gateway):
         return self._mqtt_client_manager.client_for_gateway(
-            getattr(gateway.get_attributes(), "occupant"),
+            gateway.get_occupant(),
             gateway.get_device_code(),
             [child.get_device_code() for child in gateway.get_children()],
         )

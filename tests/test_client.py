@@ -265,7 +265,7 @@ async def test_refresh_state(gateway_data: GatewayData, update_replies, client_s
                 } == update_reply
 
         aws.get_credentials_provider.assert_called_with(
-            gateway.get_attributes().occupant.identity_id
+            gateway.get_occupant().identity_id
         )
         aws.get_iot_shadow_client.assert_called()
         if gateway.get_children():
@@ -316,7 +316,7 @@ async def test_device_update(gateway_data: GatewayData, update_requests, client_
         if gateway.get_children():
             aws.get_iot_shadow_client.assert_called()
             aws.get_credentials_provider.assert_called_with(
-                gateway.get_attributes().occupant.identity_id
+                gateway.get_occupant().identity_id
             )
             shadow_client.subscribe_to_update_shadow_accepted.assert_called()
             shadow_client.publish_update_shadow.assert_called()

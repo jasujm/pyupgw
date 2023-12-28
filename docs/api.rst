@@ -30,7 +30,12 @@ Models
    :members:
    :undoc-members:
 
+.. autoclass:: Gateway
+   :show-inheritance:
+   :members:
+
 .. autoclass:: GatewayAttributes
+   :show-inheritance:
    :members:
    :undoc-members:
 
@@ -43,5 +48,10 @@ Models
    :undoc-members:
 
 .. autoclass:: ThermostatAttributes
+   :show-inheritance:
    :members:
    :undoc-members:
+
+.. autoclass:: ThermostatDevice
+   :show-inheritance:
+   :members:

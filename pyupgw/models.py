@@ -50,15 +50,10 @@ class GatewayAttributes(DeviceAttributes):
 
 
 @define
-class IotDeviceAttributes(DeviceAttributes):
-    """Attributes of an IoT device managed by gateway"""
+class ThermostatAttributes(DeviceAttributes):
+    """Attributes of a smart thermostat"""
 
     type: typing.Literal[DeviceType.DEVICE]
-
-
-@define
-class ThermostatAttributes(IotDeviceAttributes):
-    """Attributes of a smart thermostat"""
 
     system_mode: SystemMode | None = field(default=None)
     """The state of the device"""
@@ -76,10 +71,15 @@ class ThermostatAttributes(IotDeviceAttributes):
     """Maximum setpoint temperature"""
 
 
-DeviceChangeSubscriber = Callable[["Device", dict[str, typing.Any]], None]
+DeviceChangeSubscriber = Callable[["Device", Mapping[str, typing.Any]], None]
 
 
-class Device:
+AttributesType = typing.TypeVar(  # pylint: disable=invalid-name
+    "AttributesType", bound=DeviceAttributes
+)
+
+
+class Device(typing.Generic[AttributesType]):
     """A managed device
 
     A device object is a dynamic handle for the device data managed by a client.
@@ -93,12 +93,11 @@ class Device:
                 to a gateway)
     """
 
-    def __init__(self, attributes: DeviceAttributes, children: Iterable["Device"] = ()):
+    def __init__(self, attributes: AttributesType):
         self._attributes = attributes
-        self._children = list(children)
         self._subscribers: list[DeviceChangeSubscriber] = []
 
-    def get_attributes(self) -> DeviceAttributes:
+    def get_attributes(self) -> AttributesType:
         """Get the attributes associated with the device"""
         return self._attributes
 
@@ -136,6 +135,29 @@ class Device:
         """Get device code"""
         return self._attributes.device_code
 
-    def get_children(self) -> list["Device"]:
+
+class ThermostatDevice(Device[ThermostatAttributes]):
+    """A thermostat device controlled by a gateway"""
+
+
+class Gateway(Device[GatewayAttributes]):
+    """A gateway acting between :class:`ThermostatDevice` s and the cloud service
+
+    Arguments:
+      attributes: the gateway attributes
+      children: the devices controlled by this gateway
+    """
+
+    def __init__(
+        self, attributes: GatewayAttributes, children: Iterable[ThermostatDevice]
+    ):
+        super().__init__(attributes)
+        self._children = list(children)
+
+    def get_children(self) -> list[ThermostatDevice]:
         """Get the children of this device"""
         return self._children
+
+    def get_occupant(self) -> Occupant:
+        """Get the occupant of the gateway"""
+        return self._attributes.occupant

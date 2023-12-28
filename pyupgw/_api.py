@@ -19,19 +19,31 @@ from awscrt.auth import AwsCredentialsProvider
 from awscrt.io import ClientTlsContext, TlsContextOptions
 from awsiot.iotshadow import IotShadowClient
 from awsiot.mqtt_connection_builder import websockets_with_default_aws_signing
-from dotenv import load_dotenv
 from pycognito import Cognito
 
-load_dotenv()
-
-PYUPGW_AWS_CLIENT_ID = os.getenv("PYUPGW_AWS_CLIENT_ID")
-PYUPGW_AWS_REGION = os.getenv("PYUPGW_AWS_REGION")
-PYUPGW_AWS_USER_POOL_ID = os.getenv("PYUPGW_AWS_USER_POOL_ID")
-PYUPGW_AWS_ID_PROVIDER = os.getenv("PYUPGW_AWS_ID_PROVIDER")
-PYUPGW_AWS_IDENTITY_ENDPOINT = os.getenv("PYUPGW_AWS_IDENTITY_ENDPOINT")
-PYUPGW_AWS_IOT_ENDPOINT = os.getenv("PYUPGW_AWS_IOT_ENDPOINT")
-PYUPGW_SERVICE_API_BASE_URL = os.getenv("PYUPGW_SERVICE_API_BASE_URL")
-PYUPGW_SERVICE_API_COMPANY = os.getenv("PYUPGW_SERVICE_API_COMPANY")
+PYUPGW_AWS_CLIENT_ID = os.getenv(
+    "PYUPGW_AWS_CLIENT_ID", default="63qkc36u3eje4lp8ums9njmarv"
+)
+PYUPGW_AWS_REGION = os.getenv("PYUPGW_AWS_REGION", default="eu-central-1")
+PYUPGW_AWS_USER_POOL_ID = os.getenv(
+    "PYUPGW_AWS_USER_POOL_ID", default="eu-central-1_HfciXliKM"
+)
+PYUPGW_AWS_ID_PROVIDER = os.getenv(
+    "PYUPGW_AWS_ID_PROVIDER",
+    default="cognito-idp.eu-central-1.amazonaws.com/eu-central-1_HfciXliKM",
+)
+PYUPGW_AWS_IDENTITY_ENDPOINT = os.getenv(
+    "PYUPGW_AWS_IDENTITY_ENDPOINT",
+    default="cognito-identity.eu-central-1.amazonaws.com",
+)
+PYUPGW_AWS_IOT_ENDPOINT = os.getenv(
+    "PYUPGW_AWS_IOT_ENDPOINT",
+    default="a1b4blxx3o9kj3-ats.iot.eu-central-1.amazonaws.com",
+)
+PYUPGW_SERVICE_API_BASE_URL = os.getenv(
+    "PYUPGW_SERVICE_API_BASE_URL", default="https://service-api.purmo.uleeco.com/api/v1"
+)
+PYUPGW_SERVICE_API_COMPANY = os.getenv("PYUPGW_SERVICE_API_COMPANY", default="purmo")
 
 _tls_ctx = ClientTlsContext(TlsContextOptions())
 

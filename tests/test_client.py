@@ -10,7 +10,7 @@ from concurrent.futures import Future
 import pytest
 from attrs import define
 from awsiot.iotshadow import GetShadowResponse, ShadowStateWithDelta
-from hypothesis import assume, given
+from hypothesis import given
 from hypothesis import strategies as st
 
 import pyupgw.client
@@ -151,6 +151,25 @@ def _mock_service_api(monkeypatch, gateways: list[GatewayData]) -> _MockServiceA
     return ret
 
 
+@st.composite
+def _gateway_data_and_items(draw, items):
+    size = draw(st.integers(min_value=0, max_value=10))
+    gateway_data = draw(
+        st.tuples(
+            st.builds(GatewayAttributes),
+            st.lists(st.builds(ThermostatAttributes), min_size=size, max_size=size),
+        )
+    )
+    items = draw(
+        st.lists(
+            items,
+            min_size=size,
+            max_size=size,
+        )
+    )
+    return gateway_data, items
+
+
 @pytest.fixture(scope="session")
 def client_setup():
     """Context manager to setup low level clients"""
@@ -166,7 +185,23 @@ def client_setup():
 
 
 @pytest.mark.asyncio
-@given(gateways=st.lists(gateway_data))
+@given(
+    gateways=st.lists(
+        st.tuples(
+            st.builds(GatewayAttributes),
+            st.lists(
+                st.builds(
+                    ThermostatAttributes,
+                    system_mode=st.none(),
+                    temperature=st.none(),
+                    current_temperature=st.none(),
+                    min_temp=st.none(),
+                    max_temp=st.none(),
+                )
+            ),
+        )
+    )
+)
 async def test_get_gateways(gateways: list[GatewayData], client_setup):
     with client_setup(gateways) as (aws, service_api, _):
         async with create_client(USERNAME, PASSWORD) as client:
@@ -195,8 +230,7 @@ async def test_get_gateways(gateways: list[GatewayData], client_setup):
 
 @pytest.mark.asyncio
 @given(
-    gateway_data=gateway_data,
-    update_replies=st.lists(
+    gateway_data_and_update_replies=_gateway_data_and_items(
         st.fixed_dictionaries(
             {
                 "system_mode": st.sampled_from(SystemMode),
@@ -206,10 +240,10 @@ async def test_get_gateways(gateways: list[GatewayData], client_setup):
                 "max_temp": st.floats(5.0, 30.0).map(lambda v: round(v, 2)),
             }
         )
-    ),
+    )
 )
-async def test_refresh_state(gateway_data: GatewayData, update_replies, client_setup):
-    assume(len(gateway_data[1]) == len(update_replies))
+async def test_refresh_device_state(gateway_data_and_update_replies, client_setup):
+    gateway_data, update_replies = gateway_data_and_update_replies
     with client_setup([gateway_data]) as (aws, _, shadow_client):
         async with create_client(USERNAME, PASSWORD) as client:
             gateway = client.get_gateways()[0]
@@ -278,18 +312,17 @@ async def test_refresh_state(gateway_data: GatewayData, update_replies, client_s
 
 @pytest.mark.asyncio
 @given(
-    gateway_data=gateway_data,
-    update_requests=st.lists(
+    gateway_data_and_update_requests=_gateway_data_and_items(
         st.fixed_dictionaries(
             {
                 "system_mode": st.sampled_from(SystemMode),
                 "temperature": st.floats(5.0, 30.0).map(lambda v: round(v, 2)),
             }
-        )
-    ),
+        ),
+    )
 )
-async def test_device_update(gateway_data: GatewayData, update_requests, client_setup):
-    assume(len(gateway_data[1]) == len(update_requests))
+async def test_update_device_state(gateway_data_and_update_requests, client_setup):
+    gateway_data, update_requests = gateway_data_and_update_requests
     with client_setup([gateway_data]) as (aws, _, shadow_client):
         async with create_client(USERNAME, PASSWORD) as client:
             gateway = client.get_gateways()[0]

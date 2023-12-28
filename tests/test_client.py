@@ -264,11 +264,11 @@ async def test_refresh_state(gateway_data: GatewayData, update_replies, client_s
                     "max_temp": attributes.max_temp,
                 } == update_reply
 
-        aws.get_credentials_provider.assert_called_with(
-            gateway.get_occupant().identity_id
-        )
-        aws.get_iot_shadow_client.assert_called()
         if gateway.get_children():
+            aws.get_credentials_provider.assert_called_with(
+                gateway.get_occupant().identity_id
+            )
+            aws.get_iot_shadow_client.assert_called()
             shadow_client.subscribe_to_get_shadow_accepted.assert_called()
             shadow_client.publish_get_shadow.assert_called()
         else:

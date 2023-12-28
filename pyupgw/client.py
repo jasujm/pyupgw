@@ -6,7 +6,7 @@ import functools
 import logging
 import typing
 import uuid
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 
 import aiohttp
 from awscrt.mqtt import QoS
@@ -24,6 +24,7 @@ from dict_deep import deep_get
 
 from ._api import AwsApi, AwsCredentialsProvider, ServiceApi
 from .models import (
+    Device,
     DeviceType,
     Gateway,
     GatewayAttributes,
@@ -80,7 +81,7 @@ _SHADOW_TO_ATTRIBUTES_MAP: list[tuple[str, str, Callable[[typing.Any], typing.An
 ]
 
 
-def _parse_shadow_attributes(shadow_state: dict[str, typing.Any]):
+def _parse_shadow_attributes(shadow_state: Mapping[str, typing.Any]):
     ret = {}
     for attr_key, shadow_key, transform in _SHADOW_TO_ATTRIBUTES_MAP:
         if (
@@ -108,7 +109,7 @@ _ATTRIBUTES_TO_SHADOW_MAP: list[tuple[str, str, Callable[[typing.Any], typing.An
 ]
 
 
-def _create_shadow_update_attributes(changes: dict[str, typing.Any]):
+def _create_shadow_update_attributes(changes: Mapping[str, typing.Any]):
     desired_properties: dict[str, typing.Any] = {}
     for attr_key, shadow_key, transform in _ATTRIBUTES_TO_SHADOW_MAP:
         if (value := changes.get(attr_key)) is not None:
@@ -314,39 +315,58 @@ class Client(contextlib.AbstractAsyncContextManager):
         """Get the managed gateways"""
         return self._gateways
 
+    def get_devices(self) -> Iterable[tuple[Gateway, ThermostatDevice]]:
+        """Get tuples of gateways and devices managed by them"""
+        for gateway in self._gateways:
+            for child in gateway.get_children():
+                yield gateway, child
+
     async def refresh_all_devices(self):
         """Refresh states of all managed devices
+
+        This is a convenience function that calls :meth:`refresh_device_state()`
+        for all devices known to the client.
+        """
+        publish_futures = []
+        for gateway, child in self.get_devices():
+            publish_futures.append(self.refresh_device_state(gateway, child))
+        await asyncio.gather(*publish_futures)
+
+    async def refresh_device_state(
+        self,
+        gateway: Gateway,
+        device: Device,
+    ):
+        """Refresh state of a device from the server
 
         The coroutine completes when the server has acknowledged the request to
         get the states.  To get notified when the updated state is available,
         use :meth:`Device.subscribe()`
+
+        Arguments:
+          gateway: the gateway the device is connected to
+          device: the device whose state is refreshed
         """
-        for gateway in self._gateways:
-            client = await self._mqtt_client_for_gateway(gateway)
-            publish_futures = []
-            for child in gateway.get_children():
-                request = GetShadowRequest(thing_name=child.get_device_code())
-                logger.debug(
-                    "Publishing get shadow request for %s: %r",
-                    child.get_device_code(),
-                    request,
-                    extra={"request": request},
-                )
-                publish_futures.append(
-                    asyncio.wrap_future(
-                        client.publish_get_shadow(
-                            request,
-                            QoS.AT_MOST_ONCE,
-                        )
-                    )
-                )
-            await asyncio.gather(*publish_futures)
+        client = await self._mqtt_client_for_gateway(gateway)
+        request = GetShadowRequest(thing_name=device.get_device_code())
+        logger.debug(
+            "Publishing get shadow request for %s: %r",
+            device.get_device_code(),
+            request,
+            extra={"request": request},
+        )
+        return asyncio.wrap_future(
+            client.publish_get_shadow(
+                request,
+                QoS.AT_MOST_ONCE,
+            )
+        )
 
     async def update_device_state(
         self,
         gateway: Gateway,
-        device: ThermostatDevice,
-        changes: dict[str, typing.Any],
+        device: Device,
+        changes: Mapping[str, typing.Any],
     ):
         """Update the state of a device managed by the client
 

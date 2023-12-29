@@ -140,9 +140,10 @@ class Device(typing.Generic[AttributesType]):
         Arguments:
           changes: dictionary containing new values for the attributes
         """
-        self._attributes = evolve(self._attributes, **changes)
-        for subscriber in self._subscribers:
-            subscriber(self, changes)
+        if changes:
+            self._attributes = evolve(self._attributes, **changes)
+            for subscriber in self._subscribers:
+                subscriber(self, changes)
 
     async def refresh(self):
         """Refresh the state of the device

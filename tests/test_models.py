@@ -56,6 +56,18 @@ def test_device_set_attributes(
     subscriber.assert_called_with(device, asdict(new_attributes))
 
 
+@given(...)
+def test_device_set_attributes_empty_change(attributes: ThermostatAttributes):
+    subscriber = unittest.mock.Mock()
+    device = ThermostatDevice(
+        attributes, unittest.mock.AsyncMock(), unittest.mock.AsyncMock()
+    )
+    device.subscribe(subscriber)
+    device.set_attributes({})
+    assert device.get_attributes() == attributes
+    subscriber.assert_not_called()
+
+
 @pytest.mark.asyncio
 @given(...)
 async def test_device_refresh(attributes: ThermostatAttributes):

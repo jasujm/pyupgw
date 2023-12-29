@@ -124,6 +124,11 @@ async def _construct_client_data(id_token: str, access_token: str, client: "Clie
         slider_list = await service_api.get_slider_list(
             id_token, access_token, aiohttp_session
         )
+        logger.debug(
+            "Fetched list of gateways: %r",
+            slider_list,
+            extra={"response": slider_list},
+        )
         for gateway_data in slider_list["data"]:
             if gateway_data.get("type") == "gateway":
                 attributes = _parse_gateway_attributes(gateway_data)
@@ -133,6 +138,12 @@ async def _construct_client_data(id_token: str, access_token: str, client: "Clie
                     id_token,
                     access_token,
                     aiohttp_session,
+                )
+                logger.debug(
+                    "Fetched details for gateway %s: %r",
+                    attributes.id,
+                    slider_list,
+                    extra={"response": slider_list},
                 )
                 gateways.append(
                     Gateway(

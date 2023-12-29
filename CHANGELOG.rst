@@ -1,6 +1,9 @@
 Unreleased
 ----------
 
+Added
+ * Debug logging for service API responses
+
 Changed
  * Rename ``ThermostatDevice`` and ``ThermostatAttributes`` into ``HvacDevice``
    and ``HvacAttributes``, respectively. This is in anticipation that there are

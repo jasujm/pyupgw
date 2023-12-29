@@ -19,6 +19,7 @@ classifiers = [
   "Topic :: Software Development :: Libraries",
   "Topic :: Software Development :: Libraries :: Python Modules",
 ]
+readme = "README.rst"
 dynamic = ["version", "description"]
 dependencies = [
   "pycognito>=2023.5.0",

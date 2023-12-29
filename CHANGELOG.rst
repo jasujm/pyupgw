@@ -1,5 +1,8 @@
-Unreleased
-----------
+Version 0.1.1
+-------------
+
+Date
+  2023-12-29
 
 Added
  * Debug logging for service API responses

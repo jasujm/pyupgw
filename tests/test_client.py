@@ -14,7 +14,7 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 import pyupgw.client
-from pyupgw import GatewayAttributes, SystemMode, ThermostatAttributes, create_client
+from pyupgw import GatewayAttributes, HvacAttributes, SystemMode, create_client
 
 ID_TOKEN = "id_token"
 ACCESS_TOKEN = "access_token"
@@ -22,13 +22,13 @@ USERNAME = "username"
 PASSWORD = "password"
 
 
-GatewayData = tuple[GatewayAttributes, list[ThermostatAttributes]]
+GatewayData = tuple[GatewayAttributes, list[HvacAttributes]]
 
 gateway_data = st.tuples(
     st.builds(GatewayAttributes),
     st.lists(
         st.builds(
-            ThermostatAttributes,
+            HvacAttributes,
             system_mode=st.none(),
             temperature=st.none(),
             current_temperature=st.none(),
@@ -159,7 +159,7 @@ def _gateway_data_and_items(draw, items):
     gateway_data = draw(
         st.tuples(
             st.builds(GatewayAttributes),
-            st.lists(st.builds(ThermostatAttributes), min_size=size, max_size=size),
+            st.lists(st.builds(HvacAttributes), min_size=size, max_size=size),
         )
     )
     items = draw(
@@ -193,7 +193,7 @@ def client_setup():
             st.builds(GatewayAttributes),
             st.lists(
                 st.builds(
-                    ThermostatAttributes,
+                    HvacAttributes,
                     system_mode=st.none(),
                     temperature=st.none(),
                     current_temperature=st.none(),

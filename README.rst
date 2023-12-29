@@ -1,9 +1,12 @@
-Python client for Unisenza Plus Gateway
-=======================================
+Python client for Unisenza Plus
+===============================
 
-Unisenza Plus Gateway is a product that connects smart thermostats manufactured
-by `Purmo <https://global.purmo.com/>`_ to the Unisenza Plus cloud
-service. ``pyupgw`` is a python client for that cloud service.
+Unisenza Plus is a product line that connects smart thermostats and other
+devices manufactured by `Purmo <https://global.purmo.com/>`_ to a cloud service
+via the Unisenza Plus Gateway. ``pyupgw`` is a python client for that cloud
+service.
+
+Currently only the smart thermostats are supported.
 
 Installation
 ------------
@@ -74,7 +77,7 @@ Goals
 -----
 
 The main reason for this project is to (eventually) develop `Home Assistant
-<https://www.home-assistant.io/>`_ integration for the Unisenza Plus Gateway.
+<https://www.home-assistant.io/>`_ integration for the Unisenza Plus.
 
 The client library is intended to give a robust and simplified interface to the
 most important attributes and functionality of the smart thermostats. By hiding

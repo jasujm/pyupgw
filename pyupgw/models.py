@@ -12,8 +12,8 @@ from attrs import define, evolve, field
 class DeviceType(enum.Enum):
     """Enumeration indicating the type of the device"""
 
-    DEVICE = "device"
     GATEWAY = "gateway"
+    HVAC = "hvac"
 
 
 class SystemMode(enum.Enum):
@@ -51,10 +51,10 @@ class GatewayAttributes(DeviceAttributes):
 
 
 @define
-class ThermostatAttributes(DeviceAttributes):
-    """Attributes of a smart thermostat"""
+class HvacAttributes(DeviceAttributes):
+    """Attributes of a HVAC device"""
 
-    type: typing.Literal[DeviceType.DEVICE]
+    type: typing.Literal[DeviceType.HVAC]
 
     system_mode: SystemMode | None = field(default=None)
     """The state of the device"""
@@ -177,8 +177,8 @@ class Device(typing.Generic[AttributesType]):
         self._subscribers.remove(callback)
 
 
-class ThermostatDevice(Device[ThermostatAttributes]):
-    """A thermostat device controlled by a gateway"""
+class HvacDevice(Device[HvacAttributes]):
+    """A HVAC device (smart thermostat)"""
 
     def get_system_mode(self) -> SystemMode | None:
         """Get state of the device"""
@@ -210,7 +210,7 @@ class ThermostatDevice(Device[ThermostatAttributes]):
 
 
 class Gateway(Device[GatewayAttributes]):
-    """A gateway acting between :class:`ThermostatDevice` s and the cloud service
+    """A gateway acting between Unisenza IoT devices and the cloud service
 
     Arguments:
       attributes: the gateway attributes
@@ -222,7 +222,7 @@ class Gateway(Device[GatewayAttributes]):
     def __init__(
         self,
         attributes: GatewayAttributes,
-        children: Iterable[ThermostatAttributes],
+        children: Iterable[HvacAttributes],
         dispatch_refresh: Callable[["Gateway", Device], Awaitable[None]],
         dispatch_update: Callable[
             ["Gateway", Device, Mapping[str, typing.Any]], Awaitable[None]
@@ -232,11 +232,11 @@ class Gateway(Device[GatewayAttributes]):
         bound_dispatch_update = functools.partial(dispatch_update, self)
         super().__init__(attributes, bound_dispatch_refresh, bound_dispatch_update)
         self._children = [
-            ThermostatDevice(child, bound_dispatch_refresh, bound_dispatch_update)
+            HvacDevice(child, bound_dispatch_refresh, bound_dispatch_update)
             for child in children
         ]
 
-    def get_children(self) -> list[ThermostatDevice]:
+    def get_children(self) -> list[HvacDevice]:
         """Get the children of this device"""
         return self._children
 

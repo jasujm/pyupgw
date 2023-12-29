@@ -1,4 +1,4 @@
-"""Python client for Unisenza Plus Gateway"""
+"""Python client for Unisenza Plus"""
 
 __version__ = "0.1"
 
@@ -9,8 +9,8 @@ from .models import (
     DeviceType,
     Gateway,
     GatewayAttributes,
+    HvacAttributes,
+    HvacDevice,
     Occupant,
     SystemMode,
-    ThermostatAttributes,
-    ThermostatDevice,
 )

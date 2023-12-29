@@ -39,6 +39,15 @@ Models
    :members:
    :undoc-members:
 
+.. autoclass:: HvacAttributes
+   :show-inheritance:
+   :members:
+   :undoc-members:
+
+.. autoclass:: HvacDevice
+   :show-inheritance:
+   :members:
+
 .. autoclass:: Occupant
    :members:
    :undoc-members:
@@ -46,12 +55,3 @@ Models
 .. autoclass:: SystemMode
    :members:
    :undoc-members:
-
-.. autoclass:: ThermostatAttributes
-   :show-inheritance:
-   :members:
-   :undoc-members:
-
-.. autoclass:: ThermostatDevice
-   :show-inheritance:
-   :members:

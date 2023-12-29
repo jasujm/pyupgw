@@ -28,10 +28,10 @@ from .models import (
     DeviceType,
     Gateway,
     GatewayAttributes,
+    HvacAttributes,
+    HvacDevice,
     Occupant,
     SystemMode,
-    ThermostatAttributes,
-    ThermostatDevice,
 )
 
 logger = logging.getLogger(__name__)
@@ -57,14 +57,14 @@ def _parse_gateway_attributes(data):
     return GatewayAttributes(type=DeviceType.GATEWAY, **attributes, occupant=occupant)
 
 
-def _parse_thermostat_devices(data):
+def _parse_hvac_devices(data):
     for item_data in data["items"]:
         if "items" in item_data:
-            yield from _parse_thermostat_devices(item_data)
+            yield from _parse_hvac_devices(item_data)
         # the gateway itself appears under items, but let's exclude it
         elif "device_code" in item_data and "occupants_permissions" not in item_data:
-            yield ThermostatAttributes(
-                type=DeviceType.DEVICE, **_parse_device_attributes(item_data)
+            yield HvacAttributes(
+                type=DeviceType.HVAC, **_parse_device_attributes(item_data)
             )
 
 
@@ -137,7 +137,7 @@ async def _construct_client_data(id_token: str, access_token: str, client: "Clie
                 gateways.append(
                     Gateway(
                         attributes,
-                        _parse_thermostat_devices(slider_details["data"]),
+                        _parse_hvac_devices(slider_details["data"]),
                         client.refresh_device_state,
                         client.update_device_state,
                     )
@@ -273,7 +273,7 @@ class _MqttClientManager(contextlib.AbstractAsyncContextManager):
 
 
 class Client(contextlib.AbstractAsyncContextManager):
-    """Unisenza Plus Gateway client
+    """Unisenza Plus client
 
     The recommended way to start a client session is with
     :func:`create_client()` context manager.
@@ -319,7 +319,7 @@ class Client(contextlib.AbstractAsyncContextManager):
         """Get the managed gateways"""
         return self._gateways
 
-    def get_devices(self) -> Iterable[tuple[Gateway, ThermostatDevice]]:
+    def get_devices(self) -> Iterable[tuple[Gateway, HvacDevice]]:
         """Get tuples of gateways and devices managed by them"""
         for gateway in self._gateways:
             for child in gateway.get_children():
@@ -425,7 +425,7 @@ class Client(contextlib.AbstractAsyncContextManager):
 
 @contextlib.asynccontextmanager
 async def create_client(username: str, password: str):
-    """Create Unisenza Plus Gateway client
+    """Create Unisenza Plus client
 
     This function returns a context manager that initializes and manages
     resources for a :class:`Client` instance.  It also takes care of

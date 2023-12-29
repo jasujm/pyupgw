@@ -7,26 +7,20 @@ from attrs import asdict
 from hypothesis import given
 from hypothesis import strategies as st
 
-from pyupgw import (
-    Gateway,
-    GatewayAttributes,
-    SystemMode,
-    ThermostatAttributes,
-    ThermostatDevice,
-)
+from pyupgw import Gateway, GatewayAttributes, HvacAttributes, HvacDevice, SystemMode
 
 
 @given(
     st.builds(
-        ThermostatAttributes,
+        HvacAttributes,
         temperature=st.floats(allow_nan=False),
         current_temperature=st.floats(allow_nan=False),
         min_temp=st.floats(allow_nan=False),
         max_temp=st.floats(allow_nan=False),
     )
 )
-def test_device(attributes: ThermostatAttributes):
-    device = ThermostatDevice(
+def test_device(attributes: HvacAttributes):
+    device = HvacDevice(
         attributes, unittest.mock.AsyncMock(), unittest.mock.AsyncMock()
     )
     assert device.get_attributes() == attributes
@@ -44,10 +38,10 @@ def test_device(attributes: ThermostatAttributes):
 
 @given(...)
 def test_device_set_attributes(
-    attributes: ThermostatAttributes, new_attributes: ThermostatAttributes
+    attributes: HvacAttributes, new_attributes: HvacAttributes
 ):
     subscriber = unittest.mock.Mock()
-    device = ThermostatDevice(
+    device = HvacDevice(
         attributes, unittest.mock.AsyncMock(), unittest.mock.AsyncMock()
     )
     device.subscribe(subscriber)
@@ -57,9 +51,9 @@ def test_device_set_attributes(
 
 
 @given(...)
-def test_device_set_attributes_empty_change(attributes: ThermostatAttributes):
+def test_device_set_attributes_empty_change(attributes: HvacAttributes):
     subscriber = unittest.mock.Mock()
-    device = ThermostatDevice(
+    device = HvacDevice(
         attributes, unittest.mock.AsyncMock(), unittest.mock.AsyncMock()
     )
     device.subscribe(subscriber)
@@ -70,9 +64,9 @@ def test_device_set_attributes_empty_change(attributes: ThermostatAttributes):
 
 @pytest.mark.asyncio
 @given(...)
-async def test_device_refresh(attributes: ThermostatAttributes):
+async def test_device_refresh(attributes: HvacAttributes):
     dispatch_refresh = unittest.mock.AsyncMock()
-    device = ThermostatDevice(attributes, dispatch_refresh, unittest.mock.AsyncMock())
+    device = HvacDevice(attributes, dispatch_refresh, unittest.mock.AsyncMock())
     await device.refresh()
     dispatch_refresh.assert_awaited_with(device)
 
@@ -80,10 +74,10 @@ async def test_device_refresh(attributes: ThermostatAttributes):
 @pytest.mark.asyncio
 @given(...)
 async def test_device_update(
-    attributes: ThermostatAttributes, new_attributes: ThermostatAttributes
+    attributes: HvacAttributes, new_attributes: HvacAttributes
 ):
     dispatch_update = unittest.mock.AsyncMock()
-    device = ThermostatDevice(attributes, unittest.mock.AsyncMock(), dispatch_update)
+    device = HvacDevice(attributes, unittest.mock.AsyncMock(), dispatch_update)
     await device.update(asdict(new_attributes))
     dispatch_update.assert_awaited_with(device, asdict(new_attributes))
 
@@ -91,10 +85,10 @@ async def test_device_update(
 @pytest.mark.asyncio
 @given(...)
 async def test_device_update_system_mode(
-    attributes: ThermostatAttributes, system_mode: SystemMode
+    attributes: HvacAttributes, system_mode: SystemMode
 ):
     dispatch_update = unittest.mock.AsyncMock()
-    device = ThermostatDevice(attributes, unittest.mock.AsyncMock(), dispatch_update)
+    device = HvacDevice(attributes, unittest.mock.AsyncMock(), dispatch_update)
     await device.update_system_mode(system_mode)
     dispatch_update.assert_awaited_with(device, {"system_mode": system_mode})
 
@@ -102,16 +96,16 @@ async def test_device_update_system_mode(
 @pytest.mark.asyncio
 @given(attributes=..., temperature=st.floats(allow_nan=False))
 async def test_device_update_temperature(
-    attributes: ThermostatAttributes, temperature: float
+    attributes: HvacAttributes, temperature: float
 ):
     dispatch_update = unittest.mock.AsyncMock()
-    device = ThermostatDevice(attributes, unittest.mock.AsyncMock(), dispatch_update)
+    device = HvacDevice(attributes, unittest.mock.AsyncMock(), dispatch_update)
     await device.update_temperature(temperature)
     dispatch_update.assert_awaited_with(device, {"temperature": temperature})
 
 
 @given(...)
-def test_gateway(attributes: GatewayAttributes, children: list[ThermostatAttributes]):
+def test_gateway(attributes: GatewayAttributes, children: list[HvacAttributes]):
     gateway = Gateway(
         attributes, children, unittest.mock.AsyncMock(), unittest.mock.AsyncMock()
     )
@@ -123,7 +117,7 @@ def test_gateway(attributes: GatewayAttributes, children: list[ThermostatAttribu
 @pytest.mark.asyncio
 @given(...)
 async def test_gateway_refresh_child(
-    attributes: GatewayAttributes, child_attributes: ThermostatAttributes
+    attributes: GatewayAttributes, child_attributes: HvacAttributes
 ):
     dispatch_refresh = unittest.mock.AsyncMock()
     gateway = Gateway(
@@ -138,8 +132,8 @@ async def test_gateway_refresh_child(
 @given(...)
 async def test_gateway_update_child(
     attributes: GatewayAttributes,
-    child_attributes: ThermostatAttributes,
-    new_child_attributes: ThermostatAttributes,
+    child_attributes: HvacAttributes,
+    new_child_attributes: HvacAttributes,
 ):
     dispatch_update = unittest.mock.AsyncMock()
     gateway = Gateway(

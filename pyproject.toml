@@ -38,6 +38,7 @@ dev = [
   "pytest>=7.4.3",
   "pytest-asyncio>=0.23.2",
   "hypothesis>=6.92.1",
+  "isort>=5.13.2",
 ]
 
 doc = [
@@ -50,3 +51,6 @@ Home = "https://github.com/jasujm/pyupgw"
 
 [tool.mypy]
 ignore_missing_imports = true
+
+[tool.isort]
+profile = "black"

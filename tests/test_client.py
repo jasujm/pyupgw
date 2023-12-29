@@ -42,6 +42,7 @@ gateway_data = st.tuples(
 @define
 class _MockAws:
     authenticate: unittest.mock.AsyncMock
+    get_tokens: unittest.mock.Mock
     get_credentials_provider: unittest.mock.Mock
     get_iot_shadow_client: unittest.mock.AsyncMock
 
@@ -82,6 +83,7 @@ def _mock_aws(monkeypatch) -> tuple[_MockAws, _MockShadowClient]:
     )
     mock_aws = _MockAws(
         authenticate=unittest.mock.AsyncMock(return_value=(ID_TOKEN, ACCESS_TOKEN)),
+        get_tokens=unittest.mock.Mock(return_value=(ID_TOKEN, ACCESS_TOKEN)),
         get_credentials_provider=unittest.mock.Mock(return_value=object()),
         get_iot_shadow_client=unittest.mock.AsyncMock(return_value=mock_shadow_client),
     )

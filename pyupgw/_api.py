@@ -78,10 +78,18 @@ class AwsApi:
           Tuple containing id token and access token
         """
         await asyncio.to_thread(self._cognito.authenticate, password)
+        return self.get_tokens()
+
+    def get_tokens(self) -> tuple[str, str]:
+        """Get identity and access tokens from a previous authentication
+
+        Returns:
+          Tuple containing id token and access token
+        """
         return self._cognito.id_token, self._cognito.access_token
 
     def get_credentials_provider(self, identity_id: str) -> AwsCredentialsProvider:
-        """Get credentials from previous authentication"""
+        """Get credentials for a previously authenticated identity"""
         return AwsCredentialsProvider.new_cognito(
             endpoint=self._identity_endpoint,
             identity=identity_id,

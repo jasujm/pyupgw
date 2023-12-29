@@ -117,7 +117,7 @@ def _create_shadow_update_attributes(changes: Mapping[str, typing.Any]):
     return ShadowState(desired={"11": {"properties": desired_properties}})
 
 
-async def _construct_client_data(id_token: str, access_token: str):
+async def _construct_client_data(id_token: str, access_token: str, client: "Client"):
     service_api = _create_service_api()
     gateways = []
     async with aiohttp.ClientSession() as aiohttp_session:
@@ -137,12 +137,9 @@ async def _construct_client_data(id_token: str, access_token: str):
                 gateways.append(
                     Gateway(
                         attributes,
-                        [
-                            ThermostatDevice(attrs)
-                            for attrs in _parse_thermostat_devices(
-                                slider_details["data"]
-                            )
-                        ],
+                        _parse_thermostat_devices(slider_details["data"]),
+                        client.refresh_device_state,
+                        client.update_device_state,
                     )
                 )
     return gateways
@@ -278,17 +275,19 @@ class _MqttClientManager(contextlib.AbstractAsyncContextManager):
 class Client(contextlib.AbstractAsyncContextManager):
     """Unisenza Plus Gateway client
 
-    Clients for accessing gateways and devices accessible for an authenticated
-    user.
-
     The recommended way to start a client session is with
     :func:`create_client()` context manager.
+
+    Parameters:
+      aws: The AWS API object user to access the backend service.  The
+           authentication needs to be performed before creting the ``Client``
+           object.
     """
 
-    def __init__(self, aws: AwsApi, gateways: Iterable[Gateway]):
+    def __init__(self, aws: AwsApi):
         self._exit_stack = contextlib.AsyncExitStack()
         self._aws = aws
-        self._gateways = list(gateways)
+        self._gateways: list[Gateway] = []
         self._credentials_store = _CredentialsStore(aws)
         self._mqtt_client_manager = _MqttClientManager(aws, self._credentials_store)
         self._exit_stack.push_async_exit(self._mqtt_client_manager)
@@ -310,6 +309,11 @@ class Client(contextlib.AbstractAsyncContextManager):
 
     async def __aexit__(self, exc_type, exc_value, traceback):
         await self.aclose()
+
+    async def populate_devices(self):
+        """Populate devices from the server"""
+        id_token, access_token = self._aws.get_tokens()
+        self._gateways = await _construct_client_data(id_token, access_token, self)
 
     def get_gateways(self) -> list[Gateway]:
         """Get the managed gateways"""
@@ -370,6 +374,10 @@ class Client(contextlib.AbstractAsyncContextManager):
     ):
         """Update the state of a device managed by the client
 
+        This method will send the changed values to the upstream server.  The
+        in-memory attributes will only be updated after the server has
+        acknowledged that it has applied the changes.
+
         The coroutine completes when the server has acknowledged the request to
         get the states.  To get notified when the updated state is available,
         use :meth:`Device.subscribe()`
@@ -420,7 +428,8 @@ async def create_client(username: str, password: str):
     """Create Unisenza Plus Gateway client
 
     This function returns a context manager that initializes and manages
-    resources for a :class:`Client` instance.
+    resources for a :class:`Client` instance.  It also takes care of
+    authenticating and populating devices from the server.
 
     .. code-block:: python
 
@@ -432,7 +441,7 @@ async def create_client(username: str, password: str):
     """
 
     aws = _create_aws_api(username)
-    id_token, access_token = await aws.authenticate(password)
-    gateways = await _construct_client_data(id_token, access_token)
-    async with Client(aws, gateways) as client:
+    await aws.authenticate(password)
+    async with Client(aws) as client:
+        await client.populate_devices()
         yield client

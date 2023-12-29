@@ -1,9 +1,10 @@
 """Models and data structures used by the library"""
 
 import enum
+import functools
 import typing
 import uuid
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Awaitable, Callable, Iterable, Mapping
 
 from attrs import define, evolve, field
 
@@ -89,22 +90,51 @@ class Device(typing.Generic[AttributesType]):
 
     Arguments:
       attributes: the initial attributes
-      children: the children of this device (for example IoT devices connected
-                to a gateway)
+      dispatch_refresh: dispatch request to refresh the state of this device
+      dispatch_update: dispatch request to update the state of this device
     """
 
-    def __init__(self, attributes: AttributesType):
+    def __init__(
+        self,
+        attributes: AttributesType,
+        dispatch_refresh: Callable[["Device"], Awaitable[None]],
+        dispatch_update: Callable[
+            ["Device", Mapping[str, typing.Any]], Awaitable[None]
+        ],
+    ):
         self._attributes = attributes
+        self._dispatch_refresh = dispatch_refresh
+        self._dispatch_update = dispatch_update
         self._subscribers: list[DeviceChangeSubscriber] = []
 
     def get_attributes(self) -> AttributesType:
         """Get the attributes associated with the device"""
         return self._attributes
 
+    def get_id(self) -> uuid.UUID:
+        """Get device id"""
+        return self._attributes.id
+
+    def get_type(self) -> DeviceType:
+        """Get device type"""
+        return self._attributes.type
+
+    def get_device_code(self) -> str:
+        """Get device code"""
+        return self._attributes.device_code
+
+    def get_model(self) -> str:
+        """Get device code"""
+        return self._attributes.model
+
+    def get_name(self) -> str:
+        """Get device code"""
+        return self._attributes.name
+
     def set_attributes(self, changes: Mapping[str, typing.Any]):
         """Set new value for attributes
 
-        Note that this function only changes the attributes in-memory, and the
+        Note that this method only changes the attributes in-memory, and the
         changes are not dispatched to the cloud service.
 
         Arguments:
@@ -113,6 +143,20 @@ class Device(typing.Generic[AttributesType]):
         self._attributes = evolve(self._attributes, **changes)
         for subscriber in self._subscribers:
             subscriber(self, changes)
+
+    async def refresh(self):
+        """Refresh the state of the device
+
+        This call will delegate to :meth:`Client.refresh_device_state()`
+        """
+        await self._dispatch_refresh(self)
+
+    async def update(self, changes: Mapping[str, typing.Any]):
+        """Update the state of the device
+
+        This call will delegate to :meth:`Client.update_device_state()`
+        """
+        await self._dispatch_update(self, changes)
 
     def subscribe(self, callback: DeviceChangeSubscriber):
         """Register a callback to be notified when the state of a device changes
@@ -131,13 +175,37 @@ class Device(typing.Generic[AttributesType]):
         """
         self._subscribers.remove(callback)
 
-    def get_device_code(self) -> str:
-        """Get device code"""
-        return self._attributes.device_code
-
 
 class ThermostatDevice(Device[ThermostatAttributes]):
     """A thermostat device controlled by a gateway"""
+
+    def get_system_mode(self) -> SystemMode | None:
+        """Get state of the device"""
+        return self._attributes.system_mode
+
+    def get_temperature(self) -> float | None:
+        """Get the setpoint temperature"""
+        return self._attributes.temperature
+
+    def get_current_temperature(self) -> float | None:
+        """Get the current temperature as measured by the device"""
+        return self._attributes.current_temperature
+
+    def get_min_temp(self) -> float | None:
+        """Get the minimum setpoint temperature"""
+        return self._attributes.min_temp
+
+    def get_max_temp(self) -> float | None:
+        """Get the maximum setpoint temperature"""
+        return self._attributes.max_temp
+
+    async def update_system_mode(self, system_mode: SystemMode):
+        """Update the system mode"""
+        await self.update({"system_mode": system_mode})
+
+    async def update_temperature(self, temperature: float):
+        """Update the setpoint temperature"""
+        await self.update({"temperature": temperature})
 
 
 class Gateway(Device[GatewayAttributes]):
@@ -145,14 +213,27 @@ class Gateway(Device[GatewayAttributes]):
 
     Arguments:
       attributes: the gateway attributes
-      children: the devices controlled by this gateway
+      children: initial attributes of the children managed by the gateway
+      dispatch_refresh: dispatch request to refresh the state of this device
+      dispatch_update: dispatch request to update the state of this device
     """
 
     def __init__(
-        self, attributes: GatewayAttributes, children: Iterable[ThermostatDevice]
+        self,
+        attributes: GatewayAttributes,
+        children: Iterable[ThermostatAttributes],
+        dispatch_refresh: Callable[["Gateway", Device], Awaitable[None]],
+        dispatch_update: Callable[
+            ["Gateway", Device, Mapping[str, typing.Any]], Awaitable[None]
+        ],
     ):
-        super().__init__(attributes)
-        self._children = list(children)
+        bound_dispatch_refresh = functools.partial(dispatch_refresh, self)
+        bound_dispatch_update = functools.partial(dispatch_update, self)
+        super().__init__(attributes, bound_dispatch_refresh, bound_dispatch_update)
+        self._children = [
+            ThermostatDevice(child, bound_dispatch_refresh, bound_dispatch_update)
+            for child in children
+        ]
 
     def get_children(self) -> list[ThermostatDevice]:
         """Get the children of this device"""

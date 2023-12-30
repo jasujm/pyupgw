@@ -22,11 +22,12 @@ classifiers = [
 readme = "README.rst"
 dynamic = ["version", "description"]
 dependencies = [
-  "pycognito>=2023.5.0",
+  "pycognito",
   "awscrt",
-  "awsiotsdk>=1,<2",
+  "awsiotsdk",
   "attrs",
   "dict-deep",
+  "aiohttp",
 ]
 requires-python=">=3.10"
 

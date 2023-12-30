@@ -1,3 +1,9 @@
+Unreleased
+----------
+
+Fixed
+ * Include ``aiohttp`` in ``pyproject.toml``
+
 Version 0.1.1
 -------------
 

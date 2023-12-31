@@ -48,8 +48,18 @@ doc = [
   "sphinx-rtd-theme"
 ]
 
+cli = [
+  "python-dotenv",
+  "click",
+  "rich",
+  "rich-click",
+]
+
 [project.urls]
 Home = "https://github.com/jasujm/pyupgw"
+
+[project.scripts]
+pyupgw = "pyupgw.__main__:main"
 
 [tool.mypy]
 ignore_missing_imports = true

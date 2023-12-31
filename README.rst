@@ -74,6 +74,17 @@ The sample program naively uses ``asyncio.sleep()`` call to synchronize to the
 actual updates. An actual program would do something more efficient, like update
 GUI elements or dispatch messages to event loop in response to the callbacks.
 
+Command-line interface
+----------------------
+
+The library ships with a command-line interface. To install the dependencies,
+include the ``cli`` extras:
+
+.. code-block:: console
+
+   $ pip install pyupgw[cli]
+   $ pyupgw --help
+
 Goals
 -----
 

@@ -187,9 +187,10 @@ class _MqttClientManager(contextlib.AbstractAsyncContextManager):
         self._aws = aws
         self._credentials_store = credentials_store
         self._on_update_callbacks: list[
-            Callable[[str, str, GetShadowResponse | UpdateShadowResponse], None]
+            Callable[[str, str, UpdateShadowResponse], None]
         ] = []
         self._shadow_clients: dict[uuid.UUID, IotShadowClient] = {}
+        self._pending_responses: dict[str, asyncio.Future] = {}
 
     async def __aexit__(self, exc_type, exc_value, traceback):
         await asyncio.gather(
@@ -228,6 +229,31 @@ class _MqttClientManager(contextlib.AbstractAsyncContextManager):
             self._shadow_clients[occupant.id] = client
         return client
 
+    @contextlib.asynccontextmanager
+    async def publishing(self):
+        """Publishing context that helps waiting for reply"""
+        client_token = str(uuid.uuid4())
+        exit_stack = contextlib.ExitStack()
+
+        async def wrap_publish(
+            publish: Callable,
+            request: typing.Any,
+        ):
+            loop = asyncio.get_event_loop()
+            response_future = loop.create_future()
+            self._pending_responses[client_token] = response_future
+            exit_stack.callback(self._pending_responses.pop, client_token)
+            await asyncio.wrap_future(
+                publish(
+                    request,
+                    QoS.AT_MOST_ONCE,
+                )
+            )
+            return await response_future
+
+        with exit_stack:
+            yield wrap_publish, client_token
+
     async def _build_shadow_client_with_subscriptions(
         self,
         occupant: Occupant,
@@ -241,6 +267,10 @@ class _MqttClientManager(contextlib.AbstractAsyncContextManager):
         )
         subscription_futures = []
         for child_device_code in child_device_codes:
+            bound_on_get = functools.partial(
+                loop.call_soon_threadsafe,
+                self._on_get_callback,
+            )
             bound_on_update = functools.partial(
                 loop.call_soon_threadsafe,
                 self._on_update_callback,
@@ -252,7 +282,7 @@ class _MqttClientManager(contextlib.AbstractAsyncContextManager):
                     shadow_client.subscribe_to_get_shadow_accepted(
                         GetShadowSubscriptionRequest(thing_name=child_device_code),
                         QoS.AT_MOST_ONCE,
-                        bound_on_update,
+                        bound_on_get,
                     ),
                     shadow_client.subscribe_to_update_shadow_accepted(
                         UpdateShadowSubscriptionRequest(thing_name=child_device_code),
@@ -266,19 +296,30 @@ class _MqttClientManager(contextlib.AbstractAsyncContextManager):
         )
         return shadow_client
 
+    def _resolve_response_future(
+        self,
+        response: GetShadowResponse | UpdateShadowResponse,
+    ):
+        if (
+            (client_token := response.client_token)
+            and (response_future := self._pending_responses.get(client_token))
+            and not response_future.done()
+        ):
+            response_future.set_result(response)
+
+    def _on_get_callback(
+        self,
+        response: GetShadowResponse,
+    ):
+        self._resolve_response_future(response)
+
     def _on_update_callback(
         self,
         device_code: str,
         child_device_code: str,
-        response: GetShadowResponse | UpdateShadowResponse,
+        response: UpdateShadowResponse,
     ):
-        logger.debug(
-            "Received shadow doc for %s in %s: %r",
-            child_device_code,
-            device_code,
-            response,
-            extra={"response": response},
-        )
+        self._resolve_response_future(response)
         for callback in self._on_update_callbacks:
             callback(device_code, child_device_code, response)
 
@@ -354,28 +395,36 @@ class Client(contextlib.AbstractAsyncContextManager):
     ):
         """Refresh state of a device from the server
 
-        The coroutine completes when the server has acknowledged the request to
-        get the states.  To get notified when the updated state is available,
-        use :meth:`Device.subscribe()`
+        The coroutine completes when the server has sent the new state and it
+        has been applied to the device.
 
         Arguments:
           gateway: the gateway the device is connected to
           device: the device whose state is refreshed
         """
         client = await self._mqtt_client_for_gateway(gateway)
-        request = GetShadowRequest(thing_name=device.get_device_code())
-        logger.debug(
-            "Publishing get shadow request for %s: %r",
-            device.get_device_code(),
-            request,
-            extra={"request": request},
-        )
-        return asyncio.wrap_future(
-            client.publish_get_shadow(
-                request,
-                QoS.AT_MOST_ONCE,
+        async with self._mqtt_client_manager.publishing() as (
+            wrap_publish,
+            client_token,
+        ):
+            request = GetShadowRequest(
+                thing_name=device.get_device_code(), client_token=client_token
             )
-        )
+            logger.debug(
+                "Publishing get shadow request for %s: %r",
+                device.get_device_code(),
+                request,
+                extra={"request": request},
+            )
+            response = await wrap_publish(client.publish_get_shadow, request)
+            logger.debug(
+                "Get shadow response for %s: %r",
+                device.get_device_code(),
+                response,
+                extra={"response": response},
+            )
+        changes = _parse_shadow_attributes(response.state.reported)
+        device.set_attributes(changes)
 
     async def update_device_state(
         self,
@@ -386,12 +435,13 @@ class Client(contextlib.AbstractAsyncContextManager):
         """Update the state of a device managed by the client
 
         This method will send the changed values to the upstream server.  The
-        in-memory attributes will only be updated after the server has
-        acknowledged that it has applied the changes.
+        coroutine will complete after the server has accepted the request, but
+        not yet necessarily applied the changes.
 
-        The coroutine completes when the server has acknowledged the request to
-        get the states.  To get notified when the updated state is available,
-        use :meth:`Device.subscribe()`
+        The in-memory attributes will only be updated after the server has
+        acknowledged that it has applied the changes.  :meth:`Device.subscribe()`
+        can be used to subscribe to the asynchronous updates after the changes
+        have been applied.
 
         Arguments:
           gateway: the gateway the device is connected to
@@ -399,19 +449,22 @@ class Client(contextlib.AbstractAsyncContextManager):
           changes: the changes to be published
         """
         client = await self._mqtt_client_for_gateway(gateway)
-        request = UpdateShadowRequest(
-            thing_name=device.get_device_code(),
-            state=_create_shadow_update_attributes(changes),
-        )
-        logger.debug(
-            "Publishing update shadow request for %s: %r",
-            device.get_device_code(),
-            request,
-            extra={"request": request},
-        )
-        await asyncio.wrap_future(
-            client.publish_update_shadow(request, QoS.AT_MOST_ONCE)
-        )
+        async with self._mqtt_client_manager.publishing() as (
+            wrap_publish,
+            client_token,
+        ):
+            request = UpdateShadowRequest(
+                client_token=client_token,
+                thing_name=device.get_device_code(),
+                state=_create_shadow_update_attributes(changes),
+            )
+            logger.debug(
+                "Publishing update shadow request for %s: %r",
+                device.get_device_code(),
+                request,
+                extra={"request": request},
+            )
+            await wrap_publish(client.publish_update_shadow, request)
 
     def _mqtt_client_for_gateway(self, gateway: Gateway):
         return self._mqtt_client_manager.client_for_gateway(
@@ -426,6 +479,13 @@ class Client(contextlib.AbstractAsyncContextManager):
         child_device_code: str,
         response: GetShadowResponse | UpdateShadowResponse,
     ):
+        logger.debug(
+            "Received update for %s in %s: %r",
+            child_device_code,
+            device_code,
+            response,
+            extra={"response": response},
+        )
         for gateway in self._gateways:
             if gateway.get_device_code() == device_code:
                 for child in gateway.get_children():

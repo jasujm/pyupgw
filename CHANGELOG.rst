@@ -1,6 +1,10 @@
 Unreleased
 ----------
 
+Changed
+ * Refreshing and updating the state of the devices is now synchronized to the
+   reply from the server
+
 Fixed
  * Include ``aiohttp`` in ``pyproject.toml``
 

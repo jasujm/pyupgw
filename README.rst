@@ -36,8 +36,8 @@ The following sample program illustrates how to use the client
         async with create_client("username", "password") as client:
 
             # Refresh device attributes from the server
+            # The coroutine completes when the new state is available
             await client.refresh_all_devices()
-            await asyncio.sleep(10)
 
             print("Gateways:")
             for gateway in client.get_gateways():
@@ -52,26 +52,27 @@ The following sample program illustrates how to use the client
                 )
 
             device = client.get_gateways()[0].get_children()[0]
+
+            # Send updated temperature to the server
+            # The coroutine completes when the server accepts the change,
+            # but before it is applied
+            # Subscribing to changes will ensure we know when that happens
             device.subscribe(report_changes)
-
-            print(f"Updating setpoint temperature for {device.get_name()}")
             await device.update_temperature(20.0)
-
             await asyncio.sleep(10)
 
     if __name__ == "__main__":
         asyncio.run(main())
 
-Please note that the underlying API is MQTT based. Compared to REST APIs this
-makes it totally asynchronous. While the functions for refreshing and updating
-the device state are coroutines, they complete as soon as the server
-acknowledges the message (but before it actually responds with a message of its
-own). The server may not even report some updates, for instance when setting
-temperature to the same value it already has.
+The underlying API is MQTT based. This makes it totally asynchronous. The
+library automatically synchronizes when fetching fresh state for the devices,
+but the same is not true for the incremental ``update_X()`` calls. The server
+may not even report some updates, for instance when setting temperature to the
+same value it already has.
 
-The sample program naively uses ``asyncio.sleep()`` calls to synchronize to the
-actual updates. A real program would do something more elegant, like update GUI
-elements or dispatch messages to event loop in response to the callbacks.
+The sample program naively uses ``asyncio.sleep()`` call to synchronize to the
+actual updates. An actual program would do something more efficient, like update
+GUI elements or dispatch messages to event loop in response to the callbacks.
 
 Goals
 -----

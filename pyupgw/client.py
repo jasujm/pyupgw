@@ -34,6 +34,9 @@ from .models import (
     SystemMode,
 )
 
+if typing.TYPE_CHECKING:
+    import concurrent.futures
+
 logger = logging.getLogger(__name__)
 
 
@@ -236,7 +239,7 @@ class _MqttClientManager(contextlib.AbstractAsyncContextManager):
         exit_stack = contextlib.ExitStack()
 
         async def wrap_publish(
-            publish: Callable,
+            publish: Callable[[typing.Any, QoS], "concurrent.futures.Future"],
             request: typing.Any,
         ):
             loop = asyncio.get_event_loop()

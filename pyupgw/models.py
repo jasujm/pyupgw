@@ -78,7 +78,7 @@ DeviceChangeSubscriber = Callable[["Device", Mapping[str, typing.Any]], None]
 AttributesType = typing.TypeVar(  # pylint: disable=invalid-name
     "AttributesType", bound=DeviceAttributes
 )
-
+"""Type variable"""
 
 class Device(typing.Generic[AttributesType]):
     """A managed device

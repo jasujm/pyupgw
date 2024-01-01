@@ -21,6 +21,7 @@ Models
 
 .. autoclass:: Device
    :members:
+   :show-inheritance:
 
 .. autoclass:: DeviceAttributes
    :members:

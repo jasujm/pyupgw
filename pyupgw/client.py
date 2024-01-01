@@ -330,6 +330,9 @@ class Client(contextlib.AbstractAsyncContextManager):
     The recommended way to start a client session is with
     :func:`create_client()` context manager.
 
+    The newly created ``Client`` object doesn't initially know about any devices.
+    :meth:`populate_devices()` needs to be called to fetch them from the server.
+
     Parameters:
       aws: The AWS API object user to access the backend service.  The
            authentication needs to be performed before creting the ``Client``
@@ -347,8 +350,8 @@ class Client(contextlib.AbstractAsyncContextManager):
     async def aclose(self):
         """Release all resources acquired by the client
 
-        This method is automatically called when the client is used as context
-        manager.
+        When the ``Client`` object is used as context manager, this is
+        automatically called on exit.
         """
         await self._exit_stack.aclose()
 
@@ -372,7 +375,7 @@ class Client(contextlib.AbstractAsyncContextManager):
         return self._gateways
 
     def get_devices(self) -> Iterable[tuple[Gateway, HvacDevice]]:
-        """Get tuples of gateways and devices managed by them"""
+        """Get pairs of gateways and managed devices"""
         for gateway in self._gateways:
             for child in gateway.get_children():
                 yield gateway, child
@@ -395,8 +398,7 @@ class Client(contextlib.AbstractAsyncContextManager):
     ):
         """Refresh state of a device from the server
 
-        The coroutine completes when the server has sent the new state and it
-        has been applied to the device.
+        The coroutine completes when the server has responded with the new state.
 
         Arguments:
           gateway: the gateway the device is connected to
@@ -434,14 +436,14 @@ class Client(contextlib.AbstractAsyncContextManager):
     ):
         """Update the state of a device managed by the client
 
-        This method will send the changed values to the upstream server.  The
-        coroutine will complete after the server has accepted the request, but
-        not yet necessarily applied the changes.
+        This method will send the changed values to the server.  The coroutine
+        will complete after the server has accepted the request, but not yet
+        necessarily applied the changes.
 
-        The in-memory attributes will only be updated after the server has
-        acknowledged that it has applied the changes.  :meth:`Device.subscribe()`
-        can be used to subscribe to the asynchronous updates after the changes
-        have been applied.
+        The update itself is asynchronous, and the in-memory attributes of the
+        device models will only be updated after the server has acknowledged
+        that it has applied the changes.  :meth:`Device.subscribe()` can be used
+        to subscribe to the updates of the in-memory model.
 
         Arguments:
           gateway: the gateway the device is connected to

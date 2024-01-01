@@ -80,6 +80,7 @@ AttributesType = typing.TypeVar(  # pylint: disable=invalid-name
 )
 """Type variable"""
 
+
 class Device(typing.Generic[AttributesType]):
     """A managed device
 

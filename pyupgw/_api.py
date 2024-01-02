@@ -10,6 +10,7 @@ used directly.  Breaking changes may be introduced between minor versions.
 import asyncio
 import contextlib
 import os
+import threading
 import typing
 import uuid
 from collections.abc import Awaitable
@@ -70,15 +71,26 @@ class AwsApi:
             client_id=client_id or PYUPGW_AWS_CLIENT_ID,
             username=username,
         )
+        self._identity_lock = threading.Lock()
 
-    async def authenticate(self, password: str) -> tuple[str, str]:
+    def authenticate(self, password: str) -> tuple[str, str]:
         """Authenticate with ``password``
 
         Returns:
           Tuple containing id token and access token
         """
-        await asyncio.to_thread(self._cognito.authenticate, password)
-        return self.get_tokens()
+        with self._identity_lock:
+            self._cognito.authenticate(password)
+        return self._cognito.id_token, self._cognito.access_token
+
+    def check_token(self):
+        """Check identity token and refresh if necessary
+
+        Returns:
+          ``True`` if the token was refreshed, ``False`` otherwise
+        """
+        with self._identity_lock:
+            return self._cognito.check_token(renew=True)
 
     def get_tokens(self) -> tuple[str, str]:
         """Get identity and access tokens from a previous authentication
@@ -86,6 +98,7 @@ class AwsApi:
         Returns:
           Tuple containing id token and access token
         """
+        self.check_token()
         return self._cognito.id_token, self._cognito.access_token
 
     def get_credentials_provider(self, identity_id: str) -> AwsCredentialsProvider:
@@ -108,7 +121,7 @@ class AwsApi:
             region=self._region,
             credentials_provider=credentials_provider,
             client_id=f"{device_code}-{uuid.uuid4()}",
-            clean_session=True,
+            clean_session=False,
             keep_alive_secs=30,
         )
         await asyncio.wrap_future(mqtt_connection.connect())

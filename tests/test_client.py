@@ -25,7 +25,8 @@ GatewayData = tuple[GatewayAttributes, list[HvacAttributes]]
 
 @define
 class _MockAws:
-    authenticate: unittest.mock.AsyncMock
+    authenticate: unittest.mock.Mock
+    check_token: unittest.mock.Mock
     get_tokens: unittest.mock.Mock
     get_credentials_provider: unittest.mock.Mock
     get_iot_shadow_client: unittest.mock.AsyncMock
@@ -66,7 +67,8 @@ def _mock_aws(monkeypatch) -> tuple[_MockAws, _MockShadowClient]:
         None
     )
     mock_aws = _MockAws(
-        authenticate=unittest.mock.AsyncMock(return_value=(ID_TOKEN, ACCESS_TOKEN)),
+        authenticate=unittest.mock.Mock(return_value=(ID_TOKEN, ACCESS_TOKEN)),
+        check_token=unittest.mock.Mock(return_value=False),
         get_tokens=unittest.mock.Mock(return_value=(ID_TOKEN, ACCESS_TOKEN)),
         get_credentials_provider=unittest.mock.Mock(return_value=object()),
         get_iot_shadow_client=unittest.mock.AsyncMock(return_value=mock_shadow_client),
@@ -181,7 +183,7 @@ async def test_get_gateways(gateways: list[GatewayData], client_setup):
                     device.get_attributes() for device in actual_gateway.get_children()
                 ] == expected_children_attributes
 
-        aws.authenticate.assert_awaited_once()
+        aws.authenticate.assert_called_once()
         service_api.get_slider_list.assert_awaited_once_with(
             ID_TOKEN, ACCESS_TOKEN, unittest.mock.ANY
         )

@@ -7,6 +7,7 @@ Added
 Changed
  * Refreshing and updating the state of the devices is now synchronized to the
    reply from the server
+ * Tokens and WebSocket connections are automatically refreshed
 
 Fixed
  * Include ``aiohttp`` in ``pyproject.toml``

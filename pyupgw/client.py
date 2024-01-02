@@ -172,15 +172,44 @@ class _CredentialsStore:
 
     def __init__(self, api: AwsApi):
         self._api = api
-        self._credentials: dict[uuid.UUID, AwsCredentialsProvider] = {}
+        self._credentials_providers: dict[uuid.UUID, AwsCredentialsProvider] = {}
+        self._wrapped_credentials_providers: dict[
+            uuid.UUID, AwsCredentialsProvider
+        ] = {}
 
     def credentials_provider_for_occupant(self, occupant: Occupant):
         """Get credentials provider for an occupant"""
-        credentials = self._credentials.get(occupant.id)
-        if not credentials:
-            credentials = self._api.get_credentials_provider(occupant.identity_id)
-            self._credentials[occupant.id] = credentials
-        return credentials
+        credentials_provider = self._credentials_providers.get(occupant.id)
+        if not credentials_provider:
+            wrapped_credentials_provider = self._api.get_credentials_provider(
+                occupant.identity_id
+            )
+            self._wrapped_credentials_providers[
+                occupant.id
+            ] = wrapped_credentials_provider
+            credentials_provider = self._create_credentials_provider(occupant)
+            self._credentials_providers[occupant.id] = credentials_provider
+        return credentials_provider
+
+    def _create_credentials_provider(self, occupant: Occupant):
+        return AwsCredentialsProvider.new_delegate(
+            functools.partial(self._get_credentials, occupant)
+        )
+
+    def _get_credentials(self, occupant: Occupant):
+        token_expired = self._api.check_token()
+        if token_expired:
+            wrapped_credentials_provider = self._api.get_credentials_provider(
+                occupant.identity_id
+            )
+            self._wrapped_credentials_providers[
+                occupant.id
+            ] = wrapped_credentials_provider
+        else:
+            wrapped_credentials_provider = self._wrapped_credentials_providers[
+                occupant.id
+            ]
+        return wrapped_credentials_provider.get_credentials().result()
 
 
 class _MqttClientManager(contextlib.AbstractAsyncContextManager):
@@ -264,9 +293,14 @@ class _MqttClientManager(contextlib.AbstractAsyncContextManager):
         child_device_codes: Iterable[str],
     ):
         loop = asyncio.get_event_loop()
+        credentials_provider = await asyncio.to_thread(
+            functools.partial(
+                self._credentials_store.credentials_provider_for_occupant,
+                occupant,
+            )
+        )
         shadow_client = await self._aws.get_iot_shadow_client(
-            device_code,
-            self._credentials_store.credentials_provider_for_occupant(occupant),
+            device_code, credentials_provider
         )
         subscription_futures = []
         for child_device_code in child_device_codes:
@@ -370,7 +404,7 @@ class Client(contextlib.AbstractAsyncContextManager):
 
     async def populate_devices(self):
         """Populate devices from the server"""
-        id_token, access_token = self._aws.get_tokens()
+        id_token, access_token = await asyncio.to_thread(self._aws.get_tokens)
         self._gateways = await _construct_client_data(id_token, access_token, self)
 
     def get_gateways(self) -> list[Gateway]:
@@ -517,7 +551,8 @@ async def create_client(username: str, password: str):
     """
 
     aws = _create_aws_api(username)
-    await aws.authenticate(password)
+    logger.debug("Authenticating user %s", username)
+    await asyncio.to_thread(functools.partial(aws.authenticate, password))
     async with Client(aws) as client:
         await client.populate_devices()
         yield client

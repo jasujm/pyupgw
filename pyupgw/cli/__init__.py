@@ -22,13 +22,15 @@ from pyupgw import Device, Gateway, HvacDevice, create_client
 def _summary_table(devices: Iterable[tuple[Gateway, HvacDevice]]):
     table = Table(title="Device summary")
     table.add_column("Device")
+    table.add_column("Gateway")
     table.add_column("State")
     table.add_column("Temperature")
     table.add_column("Current temperature")
 
-    for _, device in devices:
+    for gateway, device in devices:
         table.add_row(
             device.get_name(),
+            gateway.get_name(),
             str(
                 system_mode.name if (system_mode := device.get_system_mode()) else None
             ),

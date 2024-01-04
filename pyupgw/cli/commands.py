@@ -1,5 +1,7 @@
 """Non-interactive commands"""
 
+import sys
+
 from rich import print
 from rich.console import Group
 from rich.pretty import Pretty
@@ -34,26 +36,30 @@ async def update(
     system_mode: SystemMode | None,
 ):
     """Update the state of a device"""
+
     device = _find_device_by_str(client, device_needle)
     if not device:
         print("[b red]Device not found")
-    else:
-        changes = {}
-        if temperature is not None:
-            changes["temperature"] = temperature
-        if system_mode is not None:
-            changes["system_mode"] = system_mode
-        await device.update(changes)
+        sys.exit(1)
+
+    changes = {}
+    if temperature is not None:
+        changes["temperature"] = temperature
+    if system_mode is not None:
+        changes["system_mode"] = system_mode
+    await device.update(changes)
 
 
 async def get(client: Client, device_needle: str):
     """Print details of a single device"""
+
     device = _find_device_by_str(client, device_needle)
     if not device:
         print("[b red]Device not found")
-    else:
-        await device.refresh()
-        print(_pretty_print_device(device))
+        sys.exit(1)
+
+    await device.refresh()
+    print(_pretty_print_device(device))
 
 
 async def list_devices(client: Client):

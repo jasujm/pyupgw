@@ -1,5 +1,8 @@
-Unreleased
-----------
+Version 0.2
+-----------
+
+Date
+  2024-01-05
 
 Added
  * Command-line interface

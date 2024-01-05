@@ -2,11 +2,14 @@
 
 import enum
 import functools
+import logging
 import typing
 import uuid
 from collections.abc import Awaitable, Callable, Iterable, Mapping
 
 from attrs import define, evolve, field
+
+logger = logging.getLogger(__name__)
 
 
 class DeviceType(enum.Enum):
@@ -144,7 +147,13 @@ class Device(typing.Generic[AttributesType]):
         if changes:
             self._attributes = evolve(self._attributes, **changes)
             for subscriber in self._subscribers:
-                subscriber(self, changes)
+                try:
+                    subscriber(self, changes)
+                except Exception:  # pylint: disable=broad-exception-caught
+                    logger.exception(
+                        "Failed to invoke subscriber callback for device %r",
+                        self.get_attributes(),
+                    )
 
     async def refresh(self):
         """Refresh the state of the device

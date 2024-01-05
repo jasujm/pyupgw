@@ -2,7 +2,7 @@
 
 __version__ = "0.2"
 
-from .client import Client, create_client
+from .client import Client, ClientError, create_client
 from .models import (
     Device,
     DeviceAttributes,

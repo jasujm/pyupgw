@@ -1,3 +1,9 @@
+Unreleased
+----------
+
+Added
+ * Error handling to several places where none previously existed
+
 Version 0.2
 -----------
 

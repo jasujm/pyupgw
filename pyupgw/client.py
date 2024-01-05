@@ -11,6 +11,7 @@ from collections.abc import Callable, Iterable, Mapping
 import aiohttp
 from awscrt.mqtt import QoS
 from awsiot.iotshadow import (
+    ErrorResponse,
     GetShadowRequest,
     GetShadowResponse,
     GetShadowSubscriptionRequest,
@@ -38,6 +39,10 @@ if typing.TYPE_CHECKING:
     import concurrent.futures
 
 logger = logging.getLogger(__name__)
+
+
+class ClientError(Exception):
+    """Error in client operation"""
 
 
 def _parse_device_attributes(data):
@@ -314,6 +319,10 @@ class _MqttClientManager(contextlib.AbstractAsyncContextManager):
                 device_code,
                 child_device_code,
             )
+            bound_on_error = functools.partial(
+                loop.call_soon_threadsafe,
+                self._on_error_callback,
+            )
             subscription_futures.extend(
                 [
                     shadow_client.subscribe_to_get_shadow_accepted(
@@ -321,10 +330,20 @@ class _MqttClientManager(contextlib.AbstractAsyncContextManager):
                         QoS.AT_MOST_ONCE,
                         bound_on_get,
                     ),
+                    shadow_client.subscribe_to_get_shadow_rejected(
+                        GetShadowSubscriptionRequest(thing_name=child_device_code),
+                        QoS.AT_MOST_ONCE,
+                        bound_on_error,
+                    ),
                     shadow_client.subscribe_to_update_shadow_accepted(
                         UpdateShadowSubscriptionRequest(thing_name=child_device_code),
                         QoS.AT_MOST_ONCE,
                         bound_on_update,
+                    ),
+                    shadow_client.subscribe_to_update_shadow_rejected(
+                        UpdateShadowSubscriptionRequest(thing_name=child_device_code),
+                        QoS.AT_MOST_ONCE,
+                        bound_on_error,
                     ),
                 ]
             )
@@ -343,6 +362,19 @@ class _MqttClientManager(contextlib.AbstractAsyncContextManager):
             and not response_future.done()
         ):
             response_future.set_result(response)
+
+    def _on_error_callback(
+        self,
+        response: ErrorResponse,
+    ):
+        if (
+            (client_token := response.client_token)
+            and (response_future := self._pending_responses.get(client_token))
+            and not response_future.done()
+        ):
+            response_future.set_exception(
+                ClientError(f"Request rejected: {response.message} ({response.code})")
+            )
 
     def _on_get_callback(
         self,
@@ -422,6 +454,9 @@ class Client(contextlib.AbstractAsyncContextManager):
 
         This is a convenience function that calls :meth:`refresh_device_state()`
         for all devices known to the client.
+
+        Raises:
+          ClientError: if the request to get device state fails
         """
         publish_futures = []
         for gateway, child in self.get_devices():
@@ -440,6 +475,9 @@ class Client(contextlib.AbstractAsyncContextManager):
         Arguments:
           gateway: the gateway the device is connected to
           device: the device whose state is refreshed
+
+        Raises:
+          ClientError: if the request to get device state fails
         """
         client = await self._mqtt_client_for_gateway(gateway)
         async with self._mqtt_client_manager.publishing() as (
@@ -486,6 +524,9 @@ class Client(contextlib.AbstractAsyncContextManager):
           gateway: the gateway the device is connected to
           device: the device whose state is updated
           changes: the changes to be published
+
+        Raises:
+          ClientError: if the request to update device state fails
         """
         client = await self._mqtt_client_for_gateway(gateway)
         async with self._mqtt_client_manager.publishing() as (

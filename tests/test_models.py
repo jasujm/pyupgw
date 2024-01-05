@@ -1,10 +1,11 @@
 """Tests for data models"""
 
+import logging
 import unittest.mock
 
 import pytest
 from attrs import asdict
-from hypothesis import given
+from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
 from pyupgw import Gateway, GatewayAttributes, HvacAttributes, HvacDevice, SystemMode
@@ -60,6 +61,23 @@ def test_device_set_attributes_empty_change(attributes: HvacAttributes):
     device.set_attributes({})
     assert device.get_attributes() == attributes
     subscriber.assert_not_called()
+
+
+@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+@given(attributes=..., new_attributes=...)
+def test_device_set_attributes_callback_error(
+    attributes: HvacAttributes, new_attributes: HvacAttributes, caplog
+):
+    subscriber = unittest.mock.Mock(side_effect=Exception("bad error"))
+    device = HvacDevice(
+        attributes, unittest.mock.AsyncMock(), unittest.mock.AsyncMock()
+    )
+    device.subscribe(subscriber)
+    with caplog.at_level(logging.ERROR):
+        device.set_attributes(asdict(new_attributes))
+    caplog.clear()
+    assert device.get_attributes() == new_attributes
+    subscriber.assert_called_with(device, asdict(new_attributes))
 
 
 @pytest.mark.asyncio

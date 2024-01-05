@@ -14,6 +14,8 @@ that creates and sets up a :class:`Client` instance.
 .. autoclass:: Client
    :members:
 
+.. autoexception:: ClientError
+
 .. autofunction:: create_client
 
 Models

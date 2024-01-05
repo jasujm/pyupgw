@@ -1,6 +1,7 @@
 """Non-interactive commands"""
 
 import sys
+import typing
 
 from rich import print
 from rich.console import Group
@@ -42,7 +43,7 @@ async def update(
         print("[b red]Device not found")
         sys.exit(1)
 
-    changes = {}
+    changes: dict[str, typing.Any] = {}
     if temperature is not None:
         changes["temperature"] = temperature
     if system_mode is not None:

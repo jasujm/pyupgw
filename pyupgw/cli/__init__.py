@@ -44,8 +44,8 @@ def cli(ctx: click.Context, username: str | None, password: str | None):
     When invoked without subcommand, starts the client in interactive mode.
 
     The author of this tool is not affiliated with Purmo, the vendor of Unisenza
-    Plus.  The tool and its conformance to the Unisenza Plus API is implemented
-    on a best-effort basis.  No warranty of any kind is provided.
+    Plus, in any way.  The tool and its conformance to the Unisenza Plus API is
+    implemented on a best-effort basis.  No warranty of any kind is provided.
     """
 
     username = username or os.getenv("PYUPGW_USERNAME")

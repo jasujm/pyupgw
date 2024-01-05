@@ -8,6 +8,13 @@ service.
 
 Currently only the smart thermostats are supported.
 
+.. note::
+
+    The author of this library is not affiliated with Purmo, the vendor of
+    Unisenza Plus, in any way.  The library and its conformance to the Unisenza
+    Plus API is implemented on a best-effort basis.  No warranty of any kind is
+    provided.
+
 Installation
 ------------
 

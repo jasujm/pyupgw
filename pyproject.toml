@@ -53,6 +53,7 @@ cli = [
   "click",
   "rich",
   "rich-click",
+  "blessed",
 ]
 
 [project.urls]

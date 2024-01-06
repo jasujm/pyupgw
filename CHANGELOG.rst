@@ -3,6 +3,7 @@ Unreleased
 
 Added
  * Error handling to several places where none previously existed
+ * Improved text user interface
 
 Version 0.2
 -----------

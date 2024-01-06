@@ -61,12 +61,7 @@ def cli(ctx: click.Context, username: str | None, password: str | None):
     }
 
     if ctx.invoked_subcommand is None:
-
-        async def _main():
-            async with create_client(username, password) as client:
-                return await tui(client)
-
-        asyncio.run(_main())
+        tui(username, password)
 
 
 def with_client(func):

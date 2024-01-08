@@ -185,7 +185,7 @@ def tui(username: str, password: str):
 
     term = Terminal()
     if not term.is_a_tty:
-        print("[red]Interactive mode supported only in TTY", file=sys.stderr)
+        print("[b red]Interactive mode supported only in TTY", file=sys.stderr)
         sys.exit(1)
 
     with term.fullscreen(), term.cbreak():

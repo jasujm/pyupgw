@@ -40,7 +40,7 @@ async def update(
 
     device = _find_device_by_str(client, device_needle)
     if not device:
-        print("[b red]Device not found")
+        print("[b red]Device not found", file=sys.stderr)
         sys.exit(1)
 
     changes: dict[str, typing.Any] = {}
@@ -56,7 +56,7 @@ async def get(client: Client, device_needle: str):
 
     device = _find_device_by_str(client, device_needle)
     if not device:
-        print("[b red]Device not found")
+        print("[b red]Device not found", file=sys.stderr)
         sys.exit(1)
 
     await device.refresh()

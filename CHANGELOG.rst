@@ -4,6 +4,7 @@ Unreleased
 Added
  * Error handling to several places where none previously existed
  * Improved text user interface
+ * ``tox`` for test automation
 
 Version 0.2
 -----------

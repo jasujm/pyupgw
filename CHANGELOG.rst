@@ -5,6 +5,7 @@ Added
  * Error handling to several places where none previously existed
  * Improved text user interface
  * ``tox`` for test automation
+ * Documentation hosted at `Read the Docs <https://pyupgw.readthedocs.io/>`_
 
 Version 0.2
 -----------

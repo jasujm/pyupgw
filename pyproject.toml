@@ -58,7 +58,8 @@ cli = [
 ]
 
 [project.urls]
-Home = "https://github.com/jasujm/pyupgw"
+Source = "https://github.com/jasujm/pyupgw"
+Documentation = "https://pyupgw.readthedocs.io/"
 
 [project.scripts]
 pyupgw = "pyupgw.__main__:main"

@@ -1,5 +1,8 @@
-Unreleased
-----------
+Version 0.3
+-----------
+
+Date
+  2024-01-09
 
 Added
  * Error handling to several places where none previously existed

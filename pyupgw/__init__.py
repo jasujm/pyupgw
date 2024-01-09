@@ -1,6 +1,6 @@
 """Python client for Unisenza Plus"""
 
-__version__ = "0.2"
+__version__ = "0.3"
 
 from .client import Client, ClientError, create_client
 from .models import (

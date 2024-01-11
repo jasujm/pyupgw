@@ -1,12 +1,11 @@
 Python client for Unisenza Plus
 ===============================
 
-Unisenza Plus is a product line that connects smart thermostats and other
-devices manufactured by `Purmo <https://global.purmo.com/>`_ to a cloud service
-via the Unisenza Plus Gateway. ``pyupgw`` is a python client for that cloud
-service.
+Unisenza Plus is an IoT family that connects smart thermostats and other devices
+manufactured by `Purmo <https://global.purmo.com/>`_ to a cloud service via the
+Unisenza Plus Gateway. ``pyupgw`` is a python client for that cloud service.
 
-Currently only the smart thermostats are supported.
+Currently, only the smart thermostats are supported.
 
 .. note::
 
@@ -42,8 +41,8 @@ The following sample program illustrates how to use the client
     async def main():
         async with create_client("username", "password") as client:
 
-            # Refresh device attributes from the server
-            # The coroutine completes when the new state is available
+            # Refresh the device state from the server.
+            # The coroutine completes when the new state is available.
             await client.refresh_all_devices()
 
             print("Gateways:")
@@ -60,10 +59,10 @@ The following sample program illustrates how to use the client
 
             device = client.get_gateways()[0].get_children()[0]
 
-            # Send updated temperature to the server
+            # Send the updated temperature to the server.
             # The coroutine completes when the server accepts the change,
-            # but before it is applied
-            # Subscribing to changes will ensure we know when that happens
+            # but hasn't necessarily applied it yet.
+            # You can subscribe to get notified when the change is eventually applied.
             device.subscribe(report_changes)
             await device.update_temperature(20.0)
             await asyncio.sleep(10)
@@ -71,20 +70,21 @@ The following sample program illustrates how to use the client
     if __name__ == "__main__":
         asyncio.run(main())
 
-The underlying API is MQTT based. This makes it totally asynchronous. The
-library automatically synchronizes when fetching fresh state for the devices,
-but the same is not true for the incremental ``update_X()`` calls. The server
-may not even report some updates, for instance when setting temperature to the
-same value it already has.
+The underlying API is based on MQTT and totally asynchronous. The library
+automatically synchronizes when fetching fresh state for the devices, but the
+same is not true for the ``update_X()`` calls. The server may not even report
+some updates, for instance when setting the temperature to the same value it
+already has.
 
-The sample program naively uses ``asyncio.sleep()`` call to synchronize to the
-actual updates. An actual program would do something more efficient, like update
-GUI elements or dispatch messages to event loop in response to the callbacks.
+The sample program naively uses ``asyncio.sleep()`` to ensure it has time to
+receive the notification about the newly applied temperature value. An actual
+program would do something more efficient, like update GUI elements or dispatch
+messages to an event loop in response to the callbacks.
 
 Command-line interface
 ----------------------
 
-The library ships with a command-line interface. To install the dependencies,
+The package contains a command-line interface. To install the dependencies,
 include the ``cli`` extras:
 
 .. code-block:: console
@@ -99,34 +99,35 @@ The main reason for this project is to (eventually) develop `Home Assistant
 <https://www.home-assistant.io/>`_ integration for the Unisenza Plus.
 
 The client library is intended to give a robust and simplified interface to the
-most important attributes and functionality of the smart thermostats. By hiding
-complexity it trades off some degree of control.
+most important functionality of the smart thermostats. By hiding complexity it
+trades off some degree of control.
 
 The library only supports a subset of features of the devices. New features may
-be added on case-by-case basis.
+be added on a case-by-case basis.
 
 Non-goals
 ---------
 
 The author of the library is in no way affiliated with the company Purmo, and
-not working using official API documentation. Hence, the scope of the library
-will likely never cover all the possible features of the products.
+not working using official API documentation. The code is based on
+experimentation with the equipment at hand, and will likely never cover all the
+possible features of the products.
 
 The Unisenza Plus service is based on the `UleEco <https://www.uleeco.com/>`_
-IoT platform. As such, this package *might* work with some modifications with
-other product lines based on the platform. However, since the author does not
-have official documentation, this is not guaranteed and a universal UleEco
-client is not in the scope of this project for the time being.
+IoT platform. Hence, the package *might* work with some modifications with other
+solutions based on the platform. However, since the author does not have
+official documentation, this is not guaranteed and a universal UleEco client is
+not in the scope of this project for the time being.
 
-The intended usage of the library is developing scripts and other automations
-for the Purmo thermostats. The underlying API contains data specifically
-intended to be consumed by the official Unisenza Plus app (related to
-presentation and notifications, for instance). There is no intention to support
-those features in this library.
+The intended use of the library is developing scripts and other automation for
+the Purmo thermostats. The underlying API contains data specifically intended to
+be consumed by the official Unisenza Plus app (related to presentation and
+notifications, for instance). There is no intention to support those features in
+this library.
 
 Contributing
 ------------
 
-This project is still in early stages. Please open an issue or PR in the `Github
-<https://github.com/jasujm/pyupgw>`_ repository if you want to get in touch with
-questions or contributions.
+This project is still in its early stages. Please open an issue or PR in the
+`Github <https://github.com/jasujm/pyupgw>`_ repository if you want to get in
+touch with questions or contributions.

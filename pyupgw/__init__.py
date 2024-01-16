@@ -2,7 +2,8 @@
 
 __version__ = "0.3"
 
-from .client import Client, ClientError, create_client
+from .client import Client, create_api, create_client
+from .errors import AuthenticationError, ClientError
 from .models import (
     Device,
     DeviceAttributes,

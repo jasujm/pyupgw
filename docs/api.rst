@@ -14,7 +14,7 @@ that creates and sets up a :class:`Client` instance.
 .. autoclass:: Client
    :members:
 
-.. autoexception:: ClientError
+.. autofunction:: create_api
 
 .. autofunction:: create_client
 
@@ -58,3 +58,10 @@ Models
 .. autoclass:: SystemMode
    :members:
    :undoc-members:
+
+Exceptions
+----------
+
+.. autoexception:: ClientError
+
+.. autoexception:: AuthenticationError

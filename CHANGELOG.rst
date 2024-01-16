@@ -1,3 +1,9 @@
+Unreleased
+----------
+
+Added
+ * ``create_api()`` method for bootstrapping client
+
 Version 0.3
 -----------
 

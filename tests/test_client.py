@@ -11,8 +11,15 @@ from attrs import define
 from hypothesis import given
 from hypothesis import strategies as st
 
+import pyupgw._api
 import pyupgw.client
-from pyupgw import GatewayAttributes, HvacAttributes, create_client
+from pyupgw import (
+    AuthenticationError,
+    GatewayAttributes,
+    HvacAttributes,
+    create_api,
+    create_client,
+)
 
 ID_TOKEN = "id_token"
 ACCESS_TOKEN = "access_token"
@@ -151,6 +158,23 @@ def client_setup():
             yield aws, service_api, shadow_client
 
     return context
+
+
+@pytest.mark.asyncio
+async def test_authenticate_with_success(client_setup):
+    with client_setup([]) as (aws, _, _):
+        api = await create_api(USERNAME, PASSWORD)
+    assert api is aws
+    aws.authenticate.assert_called_with(PASSWORD)
+
+
+@pytest.mark.asyncio
+async def test_authenticate_with_failure(client_setup):
+    with client_setup([]) as (aws, _, _):
+        aws.authenticate.side_effect = Exception("wrong password")
+        with pytest.raises(AuthenticationError):
+            await create_api(USERNAME, PASSWORD)
+    aws.authenticate.assert_called_with(PASSWORD)
 
 
 @pytest.mark.asyncio

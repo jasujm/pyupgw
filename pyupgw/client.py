@@ -24,6 +24,7 @@ from awsiot.iotshadow import (
 from dict_deep import deep_get
 
 from ._api import AwsApi, AwsCredentialsProvider, ServiceApi
+from .errors import AuthenticationError, ClientError
 from .models import (
     Device,
     DeviceType,
@@ -39,10 +40,6 @@ if typing.TYPE_CHECKING:
     import concurrent.futures
 
 logger = logging.getLogger(__name__)
-
-
-class ClientError(Exception):
-    """Error in client operation"""
 
 
 def _parse_device_attributes(data):
@@ -397,14 +394,17 @@ class Client(contextlib.AbstractAsyncContextManager):
     """Unisenza Plus client
 
     The recommended way to start a client session is with
-    :func:`create_client()` context manager.
+    :func:`create_client()` context manager.  Alternatively,
+    :func:`create_api()` can be used to create the AWS API instance manually
+    before creating the client.
 
-    The newly created ``Client`` object doesn't initially know about any devices.
-    :meth:`populate_devices()` needs to be called to fetch them from the server.
+    The newly created ``Client`` object doesn't initially know about any
+    devices.  :meth:`populate_devices()` needs to be called to fetch them from
+    the server.
 
     Parameters:
       aws: The AWS API object user to access the backend service.  The
-           authentication needs to be performed before creting the ``Client``
+           authentication needs to be performed before creating the ``Client``
            object.
     """
 
@@ -574,6 +574,27 @@ class Client(contextlib.AbstractAsyncContextManager):
                         child.set_attributes(changes)
 
 
+async def create_api(username: str, password: str) -> AwsApi:
+    """Create authenticated AWS API instance
+
+    The instance can be used to create :class:`Client` instance.  For a single
+    step creation, use :func:`create_client()` function instead.
+
+    Arguments:
+      username, password: the credentials used to log into the cloud service
+
+    Raises:
+      AuthenticationError: if authentication fails
+    """
+    aws = _create_aws_api(username)
+    logger.debug("Authenticating user %s", username)
+    try:
+        await asyncio.to_thread(functools.partial(aws.authenticate, password))
+    except Exception as ex:
+        raise AuthenticationError(f"Failed to authenticate {username}") from ex
+    return aws
+
+
 @contextlib.asynccontextmanager
 async def create_client(username: str, password: str):
     """Create Unisenza Plus client
@@ -591,9 +612,7 @@ async def create_client(username: str, password: str):
       username, password: the credentials used to log into the cloud service
     """
 
-    aws = _create_aws_api(username)
-    logger.debug("Authenticating user %s", username)
-    await asyncio.to_thread(functools.partial(aws.authenticate, password))
+    aws = await create_api(username, password)
     async with Client(aws) as client:
         await client.populate_devices()
         yield client

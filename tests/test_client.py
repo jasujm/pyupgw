@@ -186,7 +186,7 @@ async def test_authenticate_with_failure(client_setup):
                 st.builds(
                     HvacAttributes,
                     system_mode=st.none(),
-                    temperature=st.none(),
+                    target_temperature=st.none(),
                     current_temperature=st.none(),
                     min_temp=st.none(),
                     max_temp=st.none(),

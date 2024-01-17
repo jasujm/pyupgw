@@ -14,7 +14,7 @@ from pyupgw import Gateway, GatewayAttributes, HvacAttributes, HvacDevice, Syste
 @given(
     st.builds(
         HvacAttributes,
-        temperature=st.floats(allow_nan=False),
+        target_temperature=st.floats(allow_nan=False),
         current_temperature=st.floats(allow_nan=False),
         min_temp=st.floats(allow_nan=False),
         max_temp=st.floats(allow_nan=False),
@@ -32,7 +32,7 @@ def test_device(attributes: HvacAttributes):
     assert device.get_name() == attributes.name
     assert device.get_system_mode() == attributes.system_mode
     assert device.get_running_state() == attributes.running_state
-    assert device.get_temperature() == attributes.temperature
+    assert device.get_target_temperature() == attributes.target_temperature
     assert device.get_current_temperature() == attributes.current_temperature
     assert device.get_min_temp() == attributes.min_temp
     assert device.get_max_temp() == attributes.max_temp
@@ -113,14 +113,16 @@ async def test_device_update_system_mode(
 
 
 @pytest.mark.asyncio
-@given(attributes=..., temperature=st.floats(allow_nan=False))
-async def test_device_update_temperature(
-    attributes: HvacAttributes, temperature: float
+@given(attributes=..., target_temperature=st.floats(allow_nan=False))
+async def test_device_update_target_temperature(
+    attributes: HvacAttributes, target_temperature: float
 ):
     dispatch_update = unittest.mock.AsyncMock()
     device = HvacDevice(attributes, unittest.mock.AsyncMock(), dispatch_update)
-    await device.update_temperature(temperature)
-    dispatch_update.assert_awaited_with(device, {"temperature": temperature})
+    await device.update_target_temperature(target_temperature)
+    dispatch_update.assert_awaited_with(
+        device, {"target_temperature": target_temperature}
+    )
 
 
 @given(...)

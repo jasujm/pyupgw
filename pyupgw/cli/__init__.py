@@ -100,7 +100,7 @@ async def get(client: Client, device: str):
 
 @cli.command()
 @click.argument("device", required=True)
-@click.option("--temperature", "-t", type=float, help="New temperature setpoint")
+@click.option("--temperature", "-t", type=float, help="New target temperature")
 @click.option(
     "--system-mode",
     "-s",

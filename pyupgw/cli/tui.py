@@ -78,7 +78,7 @@ class Application(contextlib.AbstractAsyncContextManager):
         table.add_column("Gateway")
         table.add_column("Mode")
         table.add_column("Action")
-        table.add_column("Temperature")
+        table.add_column("Target temperature")
         table.add_column("Current temperature")
 
         for current, (gateway, device) in enumerate(self._client.get_devices()):
@@ -108,7 +108,7 @@ class Application(contextlib.AbstractAsyncContextManager):
     def _temperature_renderable(self, current: int, device: HvacDevice):
         if current == self._device_index and self._pending_temperature is not None:
             return f"[blink]{self._pending_temperature}"
-        return str(device.get_temperature())
+        return str(device.get_target_temperature())
 
     def _create_inkey_task(self):
         return asyncio.create_task(asyncio.to_thread(self._term.inkey))
@@ -148,21 +148,23 @@ class Application(contextlib.AbstractAsyncContextManager):
         elif key.code == curses.KEY_ENTER and self._pending_temperature is not None:
             self._tasks.append(
                 asyncio.create_task(
-                    self._current_device().update_temperature(self._pending_temperature)
+                    self._current_device().update_target_temperature(
+                        self._pending_temperature
+                    )
                 )
             )
             self._pending_temperature = None
         elif key == "+":
             current_device = self._current_device()
             if self._pending_temperature is None:
-                self._pending_temperature = current_device.get_temperature()
+                self._pending_temperature = current_device.get_target_temperature()
             self._pending_temperature = min(
                 self._pending_temperature + 0.5, current_device.get_max_temp()
             )
         elif key == "-":
             current_device = self._current_device()
             if self._pending_temperature is None:
-                self._pending_temperature = current_device.get_temperature()
+                self._pending_temperature = current_device.get_target_temperature()
             self._pending_temperature = max(
                 self._pending_temperature - 0.5, current_device.get_min_temp()
             )

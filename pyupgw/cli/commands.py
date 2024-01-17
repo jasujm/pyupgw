@@ -45,7 +45,7 @@ async def update(
 
     changes: dict[str, typing.Any] = {}
     if temperature is not None:
-        changes["temperature"] = temperature
+        changes["target_temperature"] = temperature
     if system_mode is not None:
         changes["system_mode"] = system_mode
     await device.update(changes)

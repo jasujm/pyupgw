@@ -75,7 +75,7 @@ def _parse_hvac_devices(data):
 
 
 _SHADOW_TO_ATTRIBUTES_MAP: list[tuple[str, str, Callable[[typing.Any], typing.Any]]] = [
-    ("temperature", "ep1:sTherS:HeatingSetpoint_x100", lambda v: float(v) / 100),
+    ("target_temperature", "ep1:sTherS:HeatingSetpoint_x100", lambda v: float(v) / 100),
     (
         "current_temperature",
         "ep1:sTherS:LocalTemperature_x100",
@@ -108,7 +108,7 @@ def _parse_shadow_attributes(shadow_state: Mapping[str, typing.Any]):
 
 _ATTRIBUTES_TO_SHADOW_MAP: list[tuple[str, str, Callable[[typing.Any], typing.Any]]] = [
     (
-        "temperature",
+        "target_temperature",
         "ep1:sTherS:SetHeatingSetpoint_x100",
         lambda v: int(round(v * 100)),
     ),

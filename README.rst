@@ -53,7 +53,7 @@ The following sample program illustrates how to use the client
             for gateway, device in client.get_devices():
                 print(
                     f"- {device.get_name()},",
-                    f"setpoint temperature: {device.get_temperature()},",
+                    f"target temperature: {device.get_target_temperature()},",
                     f"current temperature: {device.get_current_temperature()}",
                 )
 
@@ -64,7 +64,7 @@ The following sample program illustrates how to use the client
             # but hasn't necessarily applied it yet.
             # You can subscribe to get notified when the change is eventually applied.
             device.subscribe(report_changes)
-            await device.update_temperature(20.0)
+            await device.update_target_temperature(20.0)
             await asyncio.sleep(10)
 
     if __name__ == "__main__":
@@ -73,8 +73,8 @@ The following sample program illustrates how to use the client
 The underlying API is based on MQTT and totally asynchronous. The library
 automatically synchronizes when fetching fresh state for the devices, but the
 same is not true for the ``update_X()`` calls. The server may not even report
-some updates, for instance when setting the temperature to the same value it
-already has.
+some updates, for instance when setting the target temperature to the same value
+it already has.
 
 The sample program naively uses ``asyncio.sleep()`` to ensure it has time to
 receive the notification about the newly applied temperature value. An actual

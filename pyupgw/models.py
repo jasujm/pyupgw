@@ -72,7 +72,7 @@ class HvacAttributes(DeviceAttributes):
     running_state: RunningState | None = field(default=None)
     """The running state (action) of the device"""
 
-    temperature: float | None = field(default=None)
+    target_temperature: float | None = field(default=None)
     """The setpoint temperature"""
 
     current_temperature: float | None = field(default=None)
@@ -208,9 +208,9 @@ class HvacDevice(Device[HvacAttributes]):
         """Get action the device is performing"""
         return self._attributes.running_state
 
-    def get_temperature(self) -> float | None:
+    def get_target_temperature(self) -> float | None:
         """Get the setpoint temperature"""
-        return self._attributes.temperature
+        return self._attributes.target_temperature
 
     def get_current_temperature(self) -> float | None:
         """Get the current temperature as measured by the device"""
@@ -228,9 +228,9 @@ class HvacDevice(Device[HvacAttributes]):
         """Update the system mode"""
         await self.update({"system_mode": system_mode})
 
-    async def update_temperature(self, temperature: float):
+    async def update_target_temperature(self, target_temperature: float):
         """Update the setpoint temperature"""
-        await self.update({"temperature": temperature})
+        await self.update({"target_temperature": target_temperature})
 
 
 class Gateway(Device[GatewayAttributes]):

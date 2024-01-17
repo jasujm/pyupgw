@@ -2,8 +2,12 @@ Unreleased
 ----------
 
 Added
- * ``create_api()`` method for bootstrapping client
+ * ``create_api()`` function for bootstrapping client
  * ``running_state`` attribute to HVAC devices
+
+Changed
+ * Rename ``temperature`` attribute to ``target_temperature`` (the former was
+   ambiguous)
 
 Version 0.3
 -----------

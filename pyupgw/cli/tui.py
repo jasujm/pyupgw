@@ -76,7 +76,8 @@ class Application(contextlib.AbstractAsyncContextManager):
         table = Table(title="Devices", expand=True)
         table.add_column("Device")
         table.add_column("Gateway")
-        table.add_column("State")
+        table.add_column("Mode")
+        table.add_column("Action")
         table.add_column("Temperature")
         table.add_column("Current temperature")
 
@@ -87,6 +88,11 @@ class Application(contextlib.AbstractAsyncContextManager):
                 str(
                     system_mode.name
                     if (system_mode := device.get_system_mode())
+                    else None
+                ),
+                str(
+                    running_state.name
+                    if (running_state := device.get_running_state())
                     else None
                 ),
                 self._temperature_renderable(current, device),

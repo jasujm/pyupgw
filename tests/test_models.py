@@ -31,6 +31,7 @@ def test_device(attributes: HvacAttributes):
     assert device.get_model() == attributes.model
     assert device.get_name() == attributes.name
     assert device.get_system_mode() == attributes.system_mode
+    assert device.get_running_state() == attributes.running_state
     assert device.get_temperature() == attributes.temperature
     assert device.get_current_temperature() == attributes.current_temperature
     assert device.get_min_temp() == attributes.min_temp

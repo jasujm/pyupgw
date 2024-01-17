@@ -3,6 +3,7 @@ Unreleased
 
 Added
  * ``create_api()`` method for bootstrapping client
+ * ``running_state`` attribute to HVAC devices
 
 Version 0.3
 -----------

@@ -33,6 +33,7 @@ from .models import (
     HvacAttributes,
     HvacDevice,
     Occupant,
+    RunningState,
     SystemMode,
 )
 
@@ -83,6 +84,7 @@ _SHADOW_TO_ATTRIBUTES_MAP: list[tuple[str, str, Callable[[typing.Any], typing.An
     ("min_temp", "ep1:sTherS:MinHeatSetpoint_x100", lambda v: float(v) / 100),
     ("max_temp", "ep1:sTherS:MaxHeatSetpoint_x100", lambda v: float(v) / 100),
     ("system_mode", "ep1:sTherS:RunningMode", SystemMode),
+    ("running_state", "ep1:sTherS:RunningState", RunningState),
 ]
 
 

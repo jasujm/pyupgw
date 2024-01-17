@@ -26,6 +26,13 @@ class SystemMode(enum.Enum):
     HEAT = 4
 
 
+class RunningState(enum.Enum):
+    """HVAC running state"""
+
+    IDLE = 0
+    HEATING = 1
+
+
 @define
 class DeviceAttributes:
     """Common device attributes"""
@@ -60,7 +67,10 @@ class HvacAttributes(DeviceAttributes):
     type: typing.Literal[DeviceType.HVAC]
 
     system_mode: SystemMode | None = field(default=None)
-    """The state of the device"""
+    """The system mode (state) of the device"""
+
+    running_state: RunningState | None = field(default=None)
+    """The running state (action) of the device"""
 
     temperature: float | None = field(default=None)
     """The setpoint temperature"""
@@ -191,8 +201,12 @@ class HvacDevice(Device[HvacAttributes]):
     """A HVAC device (smart thermostat)"""
 
     def get_system_mode(self) -> SystemMode | None:
-        """Get state of the device"""
+        """Get mode of the device"""
         return self._attributes.system_mode
+
+    def get_running_state(self) -> RunningState | None:
+        """Get action the device is performing"""
+        return self._attributes.running_state
 
     def get_temperature(self) -> float | None:
         """Get the setpoint temperature"""

@@ -13,5 +13,6 @@ from .models import (
     HvacAttributes,
     HvacDevice,
     Occupant,
+    RunningState,
     SystemMode,
 )

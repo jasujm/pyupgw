@@ -55,6 +55,10 @@ Models
    :members:
    :undoc-members:
 
+.. autoclass:: RunningState
+   :members:
+   :undoc-members:
+
 .. autoclass:: SystemMode
    :members:
    :undoc-members:

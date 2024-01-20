@@ -149,8 +149,8 @@ async def _construct_client_data(id_token: str, access_token: str, client: "Clie
                 logger.debug(
                     "Fetched details for gateway %s: %r",
                     attributes.id,
-                    slider_list,
-                    extra={"response": slider_list},
+                    slider_details,
+                    extra={"response": slider_details},
                 )
                 gateways.append(
                     Gateway(

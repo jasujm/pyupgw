@@ -1,5 +1,8 @@
-Unreleased
-----------
+Version 0.4
+-----------
+
+Date
+  2024-01-21
 
 Added
  * ``create_api()`` function for bootstrapping client

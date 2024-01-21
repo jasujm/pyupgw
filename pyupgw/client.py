@@ -417,6 +417,10 @@ class Client(contextlib.AbstractAsyncContextManager):
         self._credentials_store = _CredentialsStore(aws)
         self._mqtt_client_manager = _MqttClientManager(aws, self._credentials_store)
         self._exit_stack.push_async_exit(self._mqtt_client_manager)
+        self._mqtt_client_manager.register_callback(self._on_update_device)
+        self._exit_stack.callback(
+            self._mqtt_client_manager.remove_callback, self._on_update_device
+        )
 
     async def aclose(self):
         """Release all resources acquired by the client
@@ -425,13 +429,6 @@ class Client(contextlib.AbstractAsyncContextManager):
         automatically called on exit.
         """
         await self._exit_stack.aclose()
-
-    async def __aenter__(self):
-        loop = asyncio.get_event_loop()
-        callback = functools.partial(loop.call_soon_threadsafe, self._on_update_device)
-        self._mqtt_client_manager.register_callback(callback)
-        self._exit_stack.callback(self._mqtt_client_manager.remove_callback, callback)
-        return self
 
     async def __aexit__(self, exc_type, exc_value, traceback):
         await self.aclose()

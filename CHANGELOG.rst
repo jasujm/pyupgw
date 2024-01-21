@@ -9,6 +9,9 @@ Changed
  * Rename ``temperature`` attribute to ``target_temperature`` (the former was
    ambiguous)
 
+Fixed
+ * ``Client`` now subscribes to updates in ``__init__()`` and not ``__aenter__()``
+
 Version 0.3
 -----------
 

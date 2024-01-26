@@ -1,3 +1,10 @@
+Unreleased
+----------
+
+Added
+ * ``manufacturer``, ``serial_number`` and ``firmware_version`` attributes to
+   HVAC devices
+
 Version 0.4
 -----------
 

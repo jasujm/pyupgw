@@ -1,5 +1,7 @@
 """Models and data structures used by the library"""
 
+# pylint: disable=too-many-instance-attributes
+
 import enum
 import functools
 import logging
@@ -65,6 +67,15 @@ class HvacAttributes(DeviceAttributes):
     """Attributes of a HVAC device"""
 
     type: typing.Literal[DeviceType.HVAC]
+
+    manufacturer: str | None = field(default=None)
+    """Device manufacturer"""
+
+    serial_number: str | None = field(default=None)
+    """Serial number"""
+
+    firmware_version: str | None = field(default=None)
+    """Firmware version"""
 
     system_mode: SystemMode | None = field(default=None)
     """The system mode (state) of the device"""
@@ -199,6 +210,18 @@ class Device(typing.Generic[AttributesType]):
 
 class HvacDevice(Device[HvacAttributes]):
     """A HVAC device (smart thermostat)"""
+
+    def get_serial_number(self) -> str | None:
+        """Get serial number"""
+        return self._attributes.serial_number
+
+    def get_manufacturer(self) -> str | None:
+        """Get serial number"""
+        return self._attributes.manufacturer
+
+    def get_firmware_version(self) -> str | None:
+        """Get serial number"""
+        return self._attributes.firmware_version
 
     def get_system_mode(self) -> SystemMode | None:
         """Get mode of the device"""

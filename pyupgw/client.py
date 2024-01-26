@@ -75,6 +75,9 @@ def _parse_hvac_devices(data):
 
 
 _SHADOW_TO_ATTRIBUTES_MAP: list[tuple[str, str, Callable[[typing.Any], typing.Any]]] = [
+    ("serial_number", "ep1:sPowerMS:RadSerialNum", str),
+    ("manufacturer", "ep1:sBasicS:ManufactureName", str),
+    ("firmware_version", "ep1:sZDO:FirmwareVersion", str),
     ("target_temperature", "ep1:sTherS:HeatingSetpoint_x100", lambda v: float(v) / 100),
     (
         "current_temperature",

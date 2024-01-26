@@ -1,6 +1,6 @@
 """Python client for Unisenza Plus"""
 
-__version__ = "0.4"
+__version__ = "0.5"
 
 from .client import Client, create_api, create_client
 from .errors import AuthenticationError, ClientError

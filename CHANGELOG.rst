@@ -1,5 +1,8 @@
-Unreleased
-----------
+Version 0.5
+-----------
+
+Date
+  2024-01-26
 
 Added
  * ``manufacturer``, ``serial_number`` and ``firmware_version`` attributes to

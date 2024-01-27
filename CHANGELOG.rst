@@ -4,6 +4,8 @@ Unreleased
 Fixed
  * Fix several external API calls blocking event loop by delegating to worker
    thread
+ * Only throw ``AuthenticationError`` if the underlying cause for the error is
+   authentication issue
 
 Version 0.5
 -----------

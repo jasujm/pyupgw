@@ -591,7 +591,14 @@ async def create_api(username: str, password: str) -> AwsApi:
     try:
         await asyncio.to_thread(aws.authenticate, password)
     except Exception as ex:
-        raise AuthenticationError(f"Failed to authenticate {username}") from ex
+        # This is a convoluted way of figuring out if the exception is
+        # NotAuthorizedException. botocore generates exception types on the fly,
+        # so I can't just import the correct exception type and except it...
+        if "NotAuthorized" in str(
+            deep_get(ex, ["__class__", "__name__"], getter=getattr)
+        ):
+            raise AuthenticationError(f"Failed to authenticate {username}") from ex
+        raise
     return aws
 
 

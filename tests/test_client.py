@@ -168,10 +168,14 @@ async def test_authenticate_with_success(client_setup):
     aws.authenticate.assert_called_with(PASSWORD)
 
 
+class NotAuthorized(Exception):
+    """Mock not authorized exception"""
+
+
 @pytest.mark.asyncio
 async def test_authenticate_with_failure(client_setup):
     with client_setup([]) as (aws, _, _):
-        aws.authenticate.side_effect = Exception("wrong password")
+        aws.authenticate.side_effect = NotAuthorized("wrong password")
         with pytest.raises(AuthenticationError):
             await create_api(USERNAME, PASSWORD)
     aws.authenticate.assert_called_with(PASSWORD)

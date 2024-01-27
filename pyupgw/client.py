@@ -278,7 +278,7 @@ class _MqttClientManager(contextlib.AbstractAsyncContextManager):
             publish: Callable[[typing.Any, QoS], "concurrent.futures.Future"],
             request: typing.Any,
         ):
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             response_future = loop.create_future()
             self._pending_responses[client_token] = response_future
             exit_stack.callback(self._pending_responses.pop, client_token)
@@ -299,12 +299,10 @@ class _MqttClientManager(contextlib.AbstractAsyncContextManager):
         device_code: str,
         child_device_codes: Iterable[str],
     ):
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         credentials_provider = await asyncio.to_thread(
-            functools.partial(
-                self._credentials_store.credentials_provider_for_occupant,
-                occupant,
-            )
+            self._credentials_store.credentials_provider_for_occupant,
+            occupant,
         )
         shadow_client = await self._aws.get_iot_shadow_client(
             device_code, credentials_provider
@@ -548,8 +546,8 @@ class Client(contextlib.AbstractAsyncContextManager):
             )
             await wrap_publish(client.publish_update_shadow, request)
 
-    def _mqtt_client_for_gateway(self, gateway: Gateway):
-        return self._mqtt_client_manager.client_for_gateway(
+    async def _mqtt_client_for_gateway(self, gateway: Gateway):
+        return await self._mqtt_client_manager.client_for_gateway(
             gateway.get_occupant(),
             gateway.get_device_code(),
             [child.get_device_code() for child in gateway.get_children()],
@@ -588,10 +586,10 @@ async def create_api(username: str, password: str) -> AwsApi:
     Raises:
       AuthenticationError: if authentication fails
     """
-    aws = _create_aws_api(username)
+    aws = await asyncio.to_thread(_create_aws_api, username)
     logger.debug("Authenticating user %s", username)
     try:
-        await asyncio.to_thread(functools.partial(aws.authenticate, password))
+        await asyncio.to_thread(aws.authenticate, password)
     except Exception as ex:
         raise AuthenticationError(f"Failed to authenticate {username}") from ex
     return aws

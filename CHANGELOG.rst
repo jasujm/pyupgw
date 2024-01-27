@@ -1,3 +1,10 @@
+Unreleased
+----------
+
+Fixed
+ * Fix several external API calls blocking event loop by delegating to worker
+   thread
+
 Version 0.5
 -----------
 

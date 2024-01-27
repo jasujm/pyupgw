@@ -9,6 +9,7 @@ used directly.  Breaking changes may be introduced between minor versions.
 
 import asyncio
 import contextlib
+import functools
 import os
 import threading
 import typing
@@ -116,15 +117,23 @@ class AwsApi:
         credentials_provider: AwsCredentialsProvider,
     ):
         """Get shadow client for a device"""
-        mqtt_connection = websockets_with_default_aws_signing(
-            endpoint=self._iot_endpoint,
-            region=self._region,
-            credentials_provider=credentials_provider,
-            client_id=f"{device_code}-{uuid.uuid4()}",
-            clean_session=False,
-            keep_alive_secs=30,
+        mqtt_connection = await asyncio.to_thread(
+            functools.partial(
+                websockets_with_default_aws_signing,
+                endpoint=self._iot_endpoint,
+                region=self._region,
+                credentials_provider=credentials_provider,
+                client_id=f"{device_code}-{uuid.uuid4()}",
+                clean_session=False,
+                keep_alive_secs=30,
+            )
         )
-        await asyncio.wrap_future(mqtt_connection.connect())
+        # It looks like the implementation of mqtt_connection.connect not only
+        # returns concurrent future, but also does blocking IO before that...
+        # Hence to not block the event loop, we delegate both creating the
+        # connection and waiting for it into worker thread.
+        connection_future = await asyncio.to_thread(mqtt_connection.connect)
+        await asyncio.wrap_future(connection_future)
         return IotShadowClient(mqtt_connection)
 
 

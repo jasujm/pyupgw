@@ -50,7 +50,7 @@ class Application(contextlib.AbstractAsyncContextManager):
         for _, device in self._client.get_devices():
             device.subscribe(self._enqueue_change)
         self._devices = list(device for _, device in self._client.get_devices())
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         loop.add_signal_handler(signal.SIGINT, self._exit_event.set)
         loop.add_signal_handler(signal.SIGTERM, self._exit_event.set)
         return self

@@ -24,6 +24,7 @@ from awsiot.iotshadow import (
 from dict_deep import deep_get
 
 from ._api import AwsApi, AwsCredentialsProvider, ServiceApi
+from ._helpers import async_future_helper
 from .errors import AuthenticationError, ClientError
 from .models import (
     Device,
@@ -234,7 +235,7 @@ class _MqttClientManager(contextlib.AbstractAsyncContextManager):
     async def __aexit__(self, exc_type, exc_value, traceback):
         await asyncio.gather(
             *(
-                asyncio.wrap_future(client.mqtt_connection.disconnect())
+                async_future_helper(client.mqtt_connection.disconnect)
                 for client in self._shadow_clients.values()
             )
         )
@@ -282,12 +283,7 @@ class _MqttClientManager(contextlib.AbstractAsyncContextManager):
             response_future = loop.create_future()
             self._pending_responses[client_token] = response_future
             exit_stack.callback(self._pending_responses.pop, client_token)
-            await asyncio.wrap_future(
-                publish(
-                    request,
-                    QoS.AT_MOST_ONCE,
-                )
-            )
+            await async_future_helper(publish, request, QoS.AT_MOST_ONCE)
             return await response_future
 
         with exit_stack:
@@ -307,7 +303,7 @@ class _MqttClientManager(contextlib.AbstractAsyncContextManager):
         shadow_client = await self._aws.get_iot_shadow_client(
             device_code, credentials_provider
         )
-        subscription_futures = []
+        subscription_futures: list[tuple["concurrent.futures.Future", str]] = []
         for child_device_code in child_device_codes:
             bound_on_get = functools.partial(
                 loop.call_soon_threadsafe,
@@ -324,28 +320,32 @@ class _MqttClientManager(contextlib.AbstractAsyncContextManager):
                 self._on_error_callback,
             )
             subscription_futures.extend(
-                [
-                    shadow_client.subscribe_to_get_shadow_accepted(
+                await asyncio.gather(
+                    asyncio.to_thread(
+                        shadow_client.subscribe_to_get_shadow_accepted,
                         GetShadowSubscriptionRequest(thing_name=child_device_code),
                         QoS.AT_MOST_ONCE,
                         bound_on_get,
                     ),
-                    shadow_client.subscribe_to_get_shadow_rejected(
+                    asyncio.to_thread(
+                        shadow_client.subscribe_to_get_shadow_rejected,
                         GetShadowSubscriptionRequest(thing_name=child_device_code),
                         QoS.AT_MOST_ONCE,
                         bound_on_error,
                     ),
-                    shadow_client.subscribe_to_update_shadow_accepted(
+                    asyncio.to_thread(
+                        shadow_client.subscribe_to_update_shadow_accepted,
                         UpdateShadowSubscriptionRequest(thing_name=child_device_code),
                         QoS.AT_MOST_ONCE,
                         bound_on_update,
                     ),
-                    shadow_client.subscribe_to_update_shadow_rejected(
+                    asyncio.to_thread(
+                        shadow_client.subscribe_to_update_shadow_rejected,
                         UpdateShadowSubscriptionRequest(thing_name=child_device_code),
                         QoS.AT_MOST_ONCE,
                         bound_on_error,
                     ),
-                ]
+                )
             )
         await asyncio.gather(
             *(asyncio.wrap_future(future) for (future, _) in subscription_futures)

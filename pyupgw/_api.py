@@ -23,6 +23,8 @@ from awsiot.iotshadow import IotShadowClient
 from awsiot.mqtt_connection_builder import websockets_with_default_aws_signing
 from pycognito import Cognito
 
+from ._helpers import async_future_helper
+
 PYUPGW_AWS_CLIENT_ID = os.getenv(
     "PYUPGW_AWS_CLIENT_ID", default="63qkc36u3eje4lp8ums9njmarv"
 )
@@ -128,12 +130,7 @@ class AwsApi:
                 keep_alive_secs=30,
             )
         )
-        # It looks like the implementation of mqtt_connection.connect not only
-        # returns concurrent future, but also does blocking IO before that...
-        # Hence to not block the event loop, we delegate both creating the
-        # connection and waiting for it into worker thread.
-        connection_future = await asyncio.to_thread(mqtt_connection.connect)
-        await asyncio.wrap_future(connection_future)
+        await async_future_helper(mqtt_connection.connect)
         return IotShadowClient(mqtt_connection)
 
 

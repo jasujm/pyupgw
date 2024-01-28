@@ -1,15 +1,13 @@
 """Helper functions"""
 
 import asyncio
-import typing
 from collections.abc import Callable
-
-if typing.TYPE_CHECKING:
-    import concurrent.futures
 
 
 async def async_future_helper(
-    func: Callable[..., "concurrent.futures.Future"], *args: typing.Any
+    func: Callable,
+    *args,
+    getter=lambda x: x,
 ):
     """Run future returning function in thread, then await the resulting future
 
@@ -20,5 +18,5 @@ async def async_future_helper(
     even if the signature suggests otherwise.  Hence it's good idea to wrap any
     ``Future`` returning AWS SDK function into this.
     """
-    future = await asyncio.to_thread(func, *args)
+    future = getter(await asyncio.to_thread(func, *args))
     return await asyncio.wrap_future(future)

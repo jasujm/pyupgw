@@ -4,6 +4,7 @@ import asyncio
 import contextlib
 import functools
 import logging
+import operator
 import typing
 import uuid
 from collections.abc import Callable, Iterable, Mapping
@@ -130,8 +131,36 @@ def _create_shadow_update_attributes(changes: Mapping[str, typing.Any]):
 
 async def _construct_client_data(id_token: str, access_token: str, client: "Client"):
     service_api = _create_service_api()
-    gateways = []
-    async with aiohttp.ClientSession() as aiohttp_session:
+    gateways: list[Gateway] = []
+    async with (
+        aiohttp.ClientSession() as aiohttp_session,
+        asyncio.TaskGroup() as task_group,
+    ):
+
+        async def _populate_gateway(gateway_data):
+            attributes = _parse_gateway_attributes(gateway_data)
+            slider_details = await service_api.get_slider_details(
+                str(attributes.id),
+                attributes.type.value,
+                id_token,
+                access_token,
+                aiohttp_session,
+            )
+            logger.debug(
+                "Fetched details for gateway %s: %r",
+                attributes.id,
+                slider_details,
+                extra={"response": slider_details},
+            )
+            gateways.append(
+                Gateway(
+                    attributes,
+                    _parse_hvac_devices(slider_details["data"]),
+                    client.refresh_device_state,
+                    client.update_device_state,
+                )
+            )
+
         slider_list = await service_api.get_slider_list(
             id_token, access_token, aiohttp_session
         )
@@ -142,28 +171,7 @@ async def _construct_client_data(id_token: str, access_token: str, client: "Clie
         )
         for gateway_data in slider_list["data"]:
             if gateway_data.get("type") == "gateway":
-                attributes = _parse_gateway_attributes(gateway_data)
-                slider_details = await service_api.get_slider_details(
-                    str(attributes.id),
-                    attributes.type.value,
-                    id_token,
-                    access_token,
-                    aiohttp_session,
-                )
-                logger.debug(
-                    "Fetched details for gateway %s: %r",
-                    attributes.id,
-                    slider_details,
-                    extra={"response": slider_details},
-                )
-                gateways.append(
-                    Gateway(
-                        attributes,
-                        _parse_hvac_devices(slider_details["data"]),
-                        client.refresh_device_state,
-                        client.update_device_state,
-                    )
-                )
+                task_group.create_task(_populate_gateway(gateway_data))
     return gateways
 
 
@@ -181,9 +189,9 @@ class _CredentialsStore:
     def __init__(self, api: AwsApi):
         self._api = api
         self._credentials_providers: dict[uuid.UUID, AwsCredentialsProvider] = {}
-        self._wrapped_credentials_providers: dict[
-            uuid.UUID, AwsCredentialsProvider
-        ] = {}
+        self._wrapped_credentials_providers: dict[uuid.UUID, AwsCredentialsProvider] = (
+            {}
+        )
 
     def credentials_provider_for_occupant(self, occupant: Occupant):
         """Get credentials provider for an occupant"""
@@ -192,9 +200,9 @@ class _CredentialsStore:
             wrapped_credentials_provider = self._api.get_credentials_provider(
                 occupant.identity_id
             )
-            self._wrapped_credentials_providers[
-                occupant.id
-            ] = wrapped_credentials_provider
+            self._wrapped_credentials_providers[occupant.id] = (
+                wrapped_credentials_provider
+            )
             credentials_provider = self._create_credentials_provider(occupant)
             self._credentials_providers[occupant.id] = credentials_provider
         return credentials_provider
@@ -210,9 +218,9 @@ class _CredentialsStore:
             wrapped_credentials_provider = self._api.get_credentials_provider(
                 occupant.identity_id
             )
-            self._wrapped_credentials_providers[
-                occupant.id
-            ] = wrapped_credentials_provider
+            self._wrapped_credentials_providers[occupant.id] = (
+                wrapped_credentials_provider
+            )
         else:
             wrapped_credentials_provider = self._wrapped_credentials_providers[
                 occupant.id
@@ -233,12 +241,11 @@ class _MqttClientManager(contextlib.AbstractAsyncContextManager):
         self._pending_responses: dict[str, asyncio.Future] = {}
 
     async def __aexit__(self, exc_type, exc_value, traceback):
-        await asyncio.gather(
-            *(
-                async_future_helper(client.mqtt_connection.disconnect)
-                for client in self._shadow_clients.values()
-            )
-        )
+        async with asyncio.TaskGroup() as task_group:
+            for client in self._shadow_clients.values():
+                task_group.create_task(
+                    async_future_helper(client.mqtt_connection.disconnect)
+                )
 
     def register_callback(
         self, callback: Callable[[str, str, GetShadowResponse], None]
@@ -303,53 +310,58 @@ class _MqttClientManager(contextlib.AbstractAsyncContextManager):
         shadow_client = await self._aws.get_iot_shadow_client(
             device_code, credentials_provider
         )
-        subscription_futures: list[tuple["concurrent.futures.Future", str]] = []
-        for child_device_code in child_device_codes:
-            bound_on_get = functools.partial(
-                loop.call_soon_threadsafe,
-                self._on_get_callback,
-            )
-            bound_on_update = functools.partial(
-                loop.call_soon_threadsafe,
-                self._on_update_callback,
-                device_code,
-                child_device_code,
-            )
-            bound_on_error = functools.partial(
-                loop.call_soon_threadsafe,
-                self._on_error_callback,
-            )
-            subscription_futures.extend(
-                await asyncio.gather(
-                    asyncio.to_thread(
+        async with asyncio.TaskGroup() as task_group:
+            for child_device_code in child_device_codes:
+                bound_on_get = functools.partial(
+                    loop.call_soon_threadsafe,
+                    self._on_get_callback,
+                )
+                bound_on_update = functools.partial(
+                    loop.call_soon_threadsafe,
+                    self._on_update_callback,
+                    device_code,
+                    child_device_code,
+                )
+                bound_on_error = functools.partial(
+                    loop.call_soon_threadsafe,
+                    self._on_error_callback,
+                )
+                task_group.create_task(
+                    async_future_helper(
                         shadow_client.subscribe_to_get_shadow_accepted,
                         GetShadowSubscriptionRequest(thing_name=child_device_code),
                         QoS.AT_MOST_ONCE,
                         bound_on_get,
-                    ),
-                    asyncio.to_thread(
+                        getter=operator.itemgetter(0),
+                    )
+                )
+                task_group.create_task(
+                    async_future_helper(
                         shadow_client.subscribe_to_get_shadow_rejected,
                         GetShadowSubscriptionRequest(thing_name=child_device_code),
                         QoS.AT_MOST_ONCE,
                         bound_on_error,
-                    ),
-                    asyncio.to_thread(
+                        getter=operator.itemgetter(0),
+                    )
+                )
+                task_group.create_task(
+                    async_future_helper(
                         shadow_client.subscribe_to_update_shadow_accepted,
                         UpdateShadowSubscriptionRequest(thing_name=child_device_code),
                         QoS.AT_MOST_ONCE,
                         bound_on_update,
-                    ),
-                    asyncio.to_thread(
+                        getter=operator.itemgetter(0),
+                    )
+                )
+                task_group.create_task(
+                    async_future_helper(
                         shadow_client.subscribe_to_update_shadow_rejected,
                         UpdateShadowSubscriptionRequest(thing_name=child_device_code),
                         QoS.AT_MOST_ONCE,
                         bound_on_error,
-                    ),
+                        getter=operator.itemgetter(0),
+                    )
                 )
-            )
-        await asyncio.gather(
-            *(asyncio.wrap_future(future) for (future, _) in subscription_futures)
-        )
         return shadow_client
 
     def _resolve_response_future(
@@ -458,10 +470,9 @@ class Client(contextlib.AbstractAsyncContextManager):
         Raises:
           ClientError: if the request to get device state fails
         """
-        publish_futures = []
-        for gateway, child in self.get_devices():
-            publish_futures.append(self.refresh_device_state(gateway, child))
-        await asyncio.gather(*publish_futures)
+        async with asyncio.TaskGroup() as task_group:
+            for gateway, child in self.get_devices():
+                task_group.create_task(self.refresh_device_state(gateway, child))
 
     async def refresh_device_state(
         self,

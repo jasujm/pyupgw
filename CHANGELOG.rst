@@ -1,11 +1,17 @@
 Unreleased
 ----------
 
+Added
+ * More concurrency
+
 Fixed
  * Fix several external API calls blocking event loop by delegating to worker
    thread
  * Only throw ``AuthenticationError`` if the underlying cause for the error is
    authentication issue
+
+Removed
+ * Support for python 3.10
 
 Version 0.5
 -----------

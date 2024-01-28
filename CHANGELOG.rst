@@ -1,5 +1,8 @@
-Unreleased
-----------
+Version 0.6
+-----------
+
+Date
+  2024-01-28
 
 Added
  * More concurrency

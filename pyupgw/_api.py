@@ -117,6 +117,8 @@ class AwsApi:
         self,
         device_code: str,
         credentials_provider: AwsCredentialsProvider,
+        on_connection_resumed=None,
+        on_connection_interrupted=None,
     ):
         """Get shadow client for a device"""
         mqtt_connection = await asyncio.to_thread(
@@ -128,6 +130,8 @@ class AwsApi:
                 client_id=f"{device_code}-{uuid.uuid4()}",
                 clean_session=False,
                 keep_alive_secs=30,
+                on_connection_resumed=on_connection_resumed,
+                on_connection_interrupted=on_connection_interrupted,
             )
         )
         await async_future_helper(mqtt_connection.connect)

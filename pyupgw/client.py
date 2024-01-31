@@ -7,9 +7,10 @@ import logging
 import operator
 import typing
 import uuid
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Awaitable, Callable, Iterable, Mapping
 
 import aiohttp
+from attrs import define, field
 from awscrt.mqtt import QoS
 from awsiot.iotshadow import (
     ErrorResponse,
@@ -43,6 +44,9 @@ if typing.TYPE_CHECKING:
     import concurrent.futures
 
 logger = logging.getLogger(__name__)
+REINITIALIZE_DELAY = 10
+MAX_REINITIALIZE_DELAY = 60
+CONNECTION_TIMEOUT = 10
 
 
 def _parse_device_attributes(data):
@@ -228,23 +232,43 @@ class _CredentialsStore:
         return wrapped_credentials_provider.get_credentials().result()
 
 
+@define
+class _ClientData:
+    client: IotShadowClient
+    device_code: str
+    child_device_codes: list[str]
+    reinitialize_connection_task: asyncio.Task | None = field(default=None)
+
+
 class _MqttClientManager(contextlib.AbstractAsyncContextManager):
     """Manage shadow clients for devices"""
 
-    def __init__(self, aws: AwsApi, credentials_store: _CredentialsStore):
+    def __init__(
+        self,
+        aws: AwsApi,
+        credentials_store: _CredentialsStore,
+        dispatch_reinitialize: Callable[[Occupant], Awaitable[IotShadowClient]],
+    ):
         self._aws = aws
         self._credentials_store = credentials_store
+        self._dispatch_reinitialize = dispatch_reinitialize
         self._on_update_callbacks: list[
             Callable[[str, str, UpdateShadowResponse], None]
         ] = []
-        self._shadow_clients: dict[uuid.UUID, IotShadowClient] = {}
+        self._client_data: dict[uuid.UUID, _ClientData] = {}
         self._pending_responses: dict[str, asyncio.Future] = {}
+        self._loop = asyncio.get_running_loop()
 
     async def __aexit__(self, exc_type, exc_value, traceback):
+        for client_data in self._client_data.values():
+            if (
+                reinitialize_connection_task := client_data.reinitialize_connection_task
+            ) is not None:
+                reinitialize_connection_task.cancel()
         async with asyncio.TaskGroup() as task_group:
-            for client in self._shadow_clients.values():
+            for client_data in self._client_data.values():
                 task_group.create_task(
-                    async_future_helper(client.mqtt_connection.disconnect)
+                    async_future_helper(client_data.client.mqtt_connection.disconnect)
                 )
 
     def register_callback(
@@ -265,15 +289,20 @@ class _MqttClientManager(contextlib.AbstractAsyncContextManager):
         self,
         occupant: Occupant,
         device_code: str,
-        child_device_codes: Iterable[str],
+        child_device_codes: list[str],
     ) -> IotShadowClient:
         """Get shadow client for a given gateway"""
-        client = self._shadow_clients.get(occupant.id)
-        if not client:
-            client = await self._build_shadow_client_with_subscriptions(
-                occupant, device_code, child_device_codes
-            )
-            self._shadow_clients[occupant.id] = client
+        client_data = self._client_data.get(occupant.id)
+        if client_data:
+            return client_data.client
+        client = await self._build_shadow_client_with_subscriptions(
+            occupant, device_code, child_device_codes
+        )
+        self._client_data[occupant.id] = _ClientData(
+            client=client,
+            device_code=device_code,
+            child_device_codes=child_device_codes,
+        )
         return client
 
     @contextlib.asynccontextmanager
@@ -303,13 +332,21 @@ class _MqttClientManager(contextlib.AbstractAsyncContextManager):
         child_device_codes: Iterable[str],
     ):
         loop = asyncio.get_running_loop()
-        credentials_provider = await asyncio.to_thread(
-            self._credentials_store.credentials_provider_for_occupant,
-            occupant,
-        )
-        shadow_client = await self._aws.get_iot_shadow_client(
-            device_code, credentials_provider
-        )
+        async with asyncio.timeout(CONNECTION_TIMEOUT):
+            credentials_provider = await asyncio.to_thread(
+                self._credentials_store.credentials_provider_for_occupant,
+                occupant,
+            )
+            shadow_client = await self._aws.get_iot_shadow_client(
+                device_code,
+                credentials_provider,
+                on_connection_resumed=functools.partial(
+                    self._on_connection_resumed, occupant=occupant
+                ),
+                on_connection_interrupted=functools.partial(
+                    self._on_connection_interrupted, occupant=occupant
+                ),
+            )
         async with asyncio.TaskGroup() as task_group:
             for child_device_code in child_device_codes:
                 bound_on_get = functools.partial(
@@ -404,6 +441,67 @@ class _MqttClientManager(contextlib.AbstractAsyncContextManager):
         for callback in self._on_update_callbacks:
             callback(device_code, child_device_code, response)
 
+    # The reconnection logic is complicated...  I've noticed empirically that
+    # AWS SDK does not always resume connection, so in addition to relying on
+    # SDK resuming it, we periodically try to reinitialize the client.
+
+    def _on_connection_interrupted(self, occupant: Occupant, **_kwargs):
+        logger.warning("Lost connection for %s", occupant.id)
+        client_data = self._client_data[occupant.id]
+
+        async def _reinitialize_connection():
+            reinitialize_delay = REINITIALIZE_DELAY
+            while True:
+                await asyncio.sleep(reinitialize_delay)
+                try:
+                    logger.debug(
+                        "Attempting to reinitialize connection for %s", occupant.id
+                    )
+                    client = await self._build_shadow_client_with_subscriptions(
+                        occupant,
+                        client_data.device_code,
+                        client_data.child_device_codes,
+                    )
+                except Exception:  # pylint: disable=broad-exception-caught
+                    logger.debug(
+                        "Failed to reinitialize connection for %s",
+                        occupant.id,
+                        exc_info=True,
+                    )
+                else:
+                    logger.info("Reinitialized connection for %s", occupant.id)
+                    old_client = client_data.client
+                    client_data.client = client
+                    await self._dispatch_reinitialize(occupant)
+                    await async_future_helper(old_client.mqtt_connection.disconnect)
+                    client_data.reinitialize_connection_task = None
+                    break
+                reinitialize_delay = min(
+                    reinitialize_delay + REINITIALIZE_DELAY, MAX_REINITIALIZE_DELAY
+                )
+
+        def _create_reinitialize_task():
+            client_data.reinitialize_connection_task = self._loop.create_task(
+                _reinitialize_connection()
+            )
+
+        if client_data.reinitialize_connection_task is None:
+            self._loop.call_soon_threadsafe(_create_reinitialize_task)
+
+    def _on_connection_resumed(self, occupant: Occupant, **_kwargs):
+        logger.info("Resumed connection for %s", occupant.id)
+        client_data = self._client_data[occupant.id]
+        if (
+            reinitialize_connection_task := client_data.reinitialize_connection_task
+        ) is not None:
+
+            def _cancel_reinitialize_task():
+                reinitialize_connection_task.cancel()
+                client_data.reinitialize_connection_task = None
+                self._loop.create_task(self._dispatch_reinitialize(occupant))
+
+            self._loop.call_soon_threadsafe(_cancel_reinitialize_task)
+
 
 class Client(contextlib.AbstractAsyncContextManager):
     """Unisenza Plus client
@@ -428,7 +526,9 @@ class Client(contextlib.AbstractAsyncContextManager):
         self._aws = aws
         self._gateways: list[Gateway] = []
         self._credentials_store = _CredentialsStore(aws)
-        self._mqtt_client_manager = _MqttClientManager(aws, self._credentials_store)
+        self._mqtt_client_manager = _MqttClientManager(
+            aws, self._credentials_store, self._refresh_all_for_occupant
+        )
         self._exit_stack.push_async_exit(self._mqtt_client_manager)
         self._mqtt_client_manager.register_callback(self._on_update_device)
         self._exit_stack.callback(
@@ -583,6 +683,15 @@ class Client(contextlib.AbstractAsyncContextManager):
                     if child.get_device_code() == child_device_code:
                         changes = _parse_shadow_attributes(response.state.reported)
                         child.set_attributes(changes)
+
+    async def _refresh_all_for_occupant(self, occupant: Occupant):
+        async with asyncio.TaskGroup() as task_group:
+            for gateway in self.get_gateways():
+                if gateway.get_occupant() == occupant:
+                    for child in gateway.get_children():
+                        task_group.create_task(
+                            self.refresh_device_state(gateway, child)
+                        )
 
 
 async def create_api(username: str, password: str) -> AwsApi:

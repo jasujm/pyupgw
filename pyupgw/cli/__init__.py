@@ -20,6 +20,7 @@ from rich.table import Table
 
 from pyupgw import Client, Device, Gateway, HvacDevice, SystemMode, create_client
 
+from ._logging import setup_logging
 from .commands import get as get_impl
 from .commands import list_devices as list_impl
 from .commands import update as update_impl
@@ -47,6 +48,8 @@ def cli(ctx: click.Context, username: str | None, password: str | None):
     Plus, in any way.  The tool and its conformance to the Unisenza Plus API is
     implemented on a best-effort basis.  No warranty of any kind is provided.
     """
+
+    setup_logging()
 
     username = username or os.getenv("PYUPGW_USERNAME")
     password = password or os.getenv("PYUPGW_PASSWORD")

@@ -4,6 +4,9 @@ Unreleased
 Date
   2024-02-02
 
+Added
+ * Nicer logging in CLI
+
 Changed
  * Refresh device states when MQTT connection is resumed
  * Try to recreate MQTT clients after connection is lost. This is an additional

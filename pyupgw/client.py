@@ -547,9 +547,16 @@ class Client(contextlib.AbstractAsyncContextManager):
         await self.aclose()
 
     async def populate_devices(self):
-        """Populate devices from the server"""
-        id_token, access_token = await asyncio.to_thread(self._aws.get_tokens)
-        self._gateways = await _construct_client_data(id_token, access_token, self)
+        """Populate devices from the server
+
+        Raises:
+          ClientError: if populating device data fails
+        """
+        try:
+            id_token, access_token = await asyncio.to_thread(self._aws.get_tokens)
+            self._gateways = await _construct_client_data(id_token, access_token, self)
+        except Exception as ex:  # pylint: disable=broad-exception-caught
+            raise ClientError("Failed to populate devices") from ex
 
     def get_gateways(self) -> list[Gateway]:
         """Get the managed gateways"""
@@ -604,7 +611,10 @@ class Client(contextlib.AbstractAsyncContextManager):
                 request,
                 extra={"request": request},
             )
-            response = await wrap_publish(client.publish_get_shadow, request)
+            try:
+                response = await wrap_publish(client.publish_get_shadow, request)
+            except Exception as ex:  # pylint: disable=broad-exception-caught
+                raise ClientError(f"Failed to refresh {device.get_name()}") from ex
             logger.debug(
                 "Get shadow response for %s: %r",
                 device.get_device_code(),
@@ -655,7 +665,10 @@ class Client(contextlib.AbstractAsyncContextManager):
                 request,
                 extra={"request": request},
             )
-            await wrap_publish(client.publish_update_shadow, request)
+            try:
+                await wrap_publish(client.publish_update_shadow, request)
+            except Exception as ex:  # pylint: disable=broad-exception-caught
+                raise ClientError(f"Failed to update {device.get_name()}") from ex
 
     async def _mqtt_client_for_gateway(self, gateway: Gateway):
         return await self._mqtt_client_manager.client_for_gateway(

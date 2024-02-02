@@ -8,6 +8,7 @@ Changed
  * Refresh device states when MQTT connection is resumed
  * Try to recreate MQTT clients after connection is lost. This is an additional
    measure on top of AWS SDK trying to resume connection.
+ * Convert errors in client operation into ``ClientError``
 
 Version 0.6
 -----------

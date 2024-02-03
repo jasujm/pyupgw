@@ -1,8 +1,8 @@
-Unreleased
-----------
+Version 0.7
+-----------
 
 Date
-  2024-02-02
+  2024-02-03
 
 Added
  * Nicer logging in CLI

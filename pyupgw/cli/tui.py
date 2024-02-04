@@ -16,8 +16,6 @@ from rich.table import Table
 
 from pyupgw import Client, Device, HvacDevice, SystemMode, create_client
 
-from ._logging import set_logging_console
-
 HELP_PANEL = Panel(
     "(:arrow_up::arrow_down:) Select device, (O)ff, (H)eat, (+-) Adjust temperature, (Enter) Confirm"
 )
@@ -185,7 +183,6 @@ async def _tui_main(term: Terminal, username: str, password: str):
     async with create_client(username, password) as client:
         async with Application(client, term) as app:
             with Live(app.get_renderable()) as live:
-                set_logging_console(live.console)
                 while not app.done():
                     await app.tick(live.console)
                     live.update(app.get_renderable(), refresh=True)

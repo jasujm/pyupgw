@@ -26,7 +26,7 @@ from awsiot.iotshadow import (
 from dict_deep import deep_get
 
 from ._api import AwsApi, AwsCredentialsProvider, ServiceApi
-from ._helpers import async_future_helper
+from ._helpers import LazyEncode, async_future_helper
 from .errors import AuthenticationError, ClientError
 from .models import (
     Device,
@@ -154,7 +154,7 @@ async def _construct_client_data(id_token: str, access_token: str, client: "Clie
                 "Fetched details for gateway %s: %r",
                 attributes.id,
                 slider_details,
-                extra={"response": slider_details},
+                extra={"response": LazyEncode(slider_details)},
             )
             gateways.append(
                 Gateway(
@@ -171,7 +171,7 @@ async def _construct_client_data(id_token: str, access_token: str, client: "Clie
         logger.debug(
             "Fetched list of gateways: %r",
             slider_list,
-            extra={"response": slider_list},
+            extra={"response": LazyEncode(slider_list)},
         )
         for gateway_data in slider_list["data"]:
             if gateway_data.get("type") == "gateway":
@@ -609,7 +609,7 @@ class Client(contextlib.AbstractAsyncContextManager):
                 "Publishing get shadow request for %s: %r",
                 device.get_device_code(),
                 request,
-                extra={"request": request},
+                extra={"request": LazyEncode(request)},
             )
             try:
                 response = await wrap_publish(client.publish_get_shadow, request)
@@ -619,7 +619,7 @@ class Client(contextlib.AbstractAsyncContextManager):
                 "Get shadow response for %s: %r",
                 device.get_device_code(),
                 response,
-                extra={"response": response},
+                extra={"response": LazyEncode(response)},
             )
         changes = _parse_shadow_attributes(response.state.reported)
         device.set_attributes(changes)
@@ -663,7 +663,7 @@ class Client(contextlib.AbstractAsyncContextManager):
                 "Publishing update shadow request for %s: %r",
                 device.get_device_code(),
                 request,
-                extra={"request": request},
+                extra={"request": LazyEncode(request)},
             )
             try:
                 await wrap_publish(client.publish_update_shadow, request)
@@ -688,7 +688,7 @@ class Client(contextlib.AbstractAsyncContextManager):
             child_device_code,
             device_code,
             response,
-            extra={"response": response},
+            extra={"response": LazyEncode(response)},
         )
         for gateway in self._gateways:
             if gateway.get_device_code() == device_code:

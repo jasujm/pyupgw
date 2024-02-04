@@ -1,3 +1,8 @@
+Unreleased
+
+Added
+ * More flexible logging configuration
+
 Version 0.7
 -----------
 

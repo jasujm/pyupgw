@@ -41,6 +41,7 @@ dev = [
   "hypothesis>=6.92.1",
   "isort>=5.13.2",
   "tox>=4.11.4",
+  "types-PyYAML"
 ]
 
 doc = [
@@ -54,6 +55,8 @@ cli = [
   "rich",
   "rich-click",
   "blessed",
+  "jsonformatter",
+  "PyYAML",
 ]
 
 [project.urls]

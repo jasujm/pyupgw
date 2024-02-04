@@ -1,11 +1,46 @@
 """CLI logging"""
 
-import logging
+import json
+import logging, logging.config
 
 from rich.logging import RichHandler
+import yaml
+
+from pyupgw._helpers import LazyEncode
+
+# This is not pretty, but it's just the most foolproof way to ensure
+# `LazyEncode` objects always get serialized properly
 
 
-def setup_logging(handlers=None, **kwargs):
+class _MyJSONEncoder(json.JSONEncoder):
+    def default(self, o):
+        if isinstance(o, LazyEncode):
+            return o.encode()
+        return super().default(o)
+
+
+_original_json_dumps = json.dumps
+
+
+def _new_json_dumps(*args, **kwargs):
+    kwargs["cls"] = _MyJSONEncoder
+    return _original_json_dumps(*args, **kwargs)
+
+
+json.dumps = _new_json_dumps
+
+
+def _setup_logging_basic():
+    logging.basicConfig(handlers=[RichHandler()])
+
+def _setup_logging_file(config_file: str):
+    with open(config_file) as f:
+        config = yaml.load(f, Loader=yaml.Loader)
+    logging.config.dictConfig(config)
+
+def setup_logging(config_file: str | None=None):
     """Setup logging"""
-    handlers = [*(handlers or []), RichHandler()]
-    logging.basicConfig(handlers=handlers, **kwargs)
+    if config_file:
+        _setup_logging_file(config_file)
+    else:
+        _setup_logging_basic()

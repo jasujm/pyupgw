@@ -11,3 +11,4 @@ API reference
    :maxdepth: 2
 
    api
+   developing

@@ -38,8 +38,12 @@ from .tui import tui
     "--password",
     help="Password for the user. Alternatively can be loaded from the PYUPGW_PASSWORD environment variable.",
 )
+@click.option(
+    "--logging-config",
+    help="YAML file containing logging config for the application"
+)
 @click.pass_context
-def cli(ctx: click.Context, username: str | None, password: str | None):
+def cli(ctx: click.Context, username: str | None, password: str | None, logging_config: str | None):
     """Command-line interface for Unisenza Plus
 
     When invoked without subcommand, starts the client in interactive mode.
@@ -49,7 +53,7 @@ def cli(ctx: click.Context, username: str | None, password: str | None):
     implemented on a best-effort basis.  No warranty of any kind is provided.
     """
 
-    setup_logging()
+    setup_logging(logging_config)
 
     username = username or os.getenv("PYUPGW_USERNAME")
     password = password or os.getenv("PYUPGW_PASSWORD")

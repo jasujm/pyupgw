@@ -2,6 +2,10 @@ Unreleased
 
 Added
  * More flexible logging configuration
+ * Timeout for publishing and receiving MQTT replies
+
+Changed
+ * Increase timeouts for reinitializing MQTT connection
 
 Version 0.7
 -----------

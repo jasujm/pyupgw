@@ -44,9 +44,10 @@ if typing.TYPE_CHECKING:
     import concurrent.futures
 
 logger = logging.getLogger(__name__)
-REINITIALIZE_DELAY = 10
-MAX_REINITIALIZE_DELAY = 60
-CONNECTION_TIMEOUT = 10
+REINITIALIZE_DELAY = 60
+MAX_REINITIALIZE_DELAY = 300
+CONNECTION_TIMEOUT = 60
+PUBLISHING_TIMEOUT = 60
 
 
 def _parse_device_attributes(data):
@@ -323,7 +324,8 @@ class _MqttClientManager(contextlib.AbstractAsyncContextManager):
             return await response_future
 
         with exit_stack:
-            yield wrap_publish, client_token
+            async with asyncio.timeout(PUBLISHING_TIMEOUT):
+                yield wrap_publish, client_token
 
     async def _build_shadow_client_with_subscriptions(
         self,

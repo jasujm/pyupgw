@@ -6,6 +6,7 @@ Added
 
 Changed
  * Increase timeouts for reinitializing MQTT connection
+ * Logging in TUI application
 
 Version 0.7
 -----------

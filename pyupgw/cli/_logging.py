@@ -1,10 +1,11 @@
 """CLI logging"""
 
 import json
-import logging, logging.config
+import logging
+import logging.config
 
-from rich.logging import RichHandler
 import yaml
+from rich.logging import RichHandler
 
 from pyupgw._helpers import LazyEncode
 
@@ -31,14 +32,16 @@ json.dumps = _new_json_dumps
 
 
 def _setup_logging_basic():
-    logging.basicConfig(handlers=[RichHandler()])
+    logging.basicConfig(level=logging.INFO, handlers=[RichHandler()])
+
 
 def _setup_logging_file(config_file: str):
     with open(config_file) as f:
         config = yaml.load(f, Loader=yaml.Loader)
     logging.config.dictConfig(config)
 
-def setup_logging(config_file: str | None=None):
+
+def setup_logging(config_file: str | None = None):
     """Setup logging"""
     if config_file:
         _setup_logging_file(config_file)

@@ -3,18 +3,21 @@
 import asyncio
 import contextlib
 import curses
+import logging
 import signal
 import sys
 import typing
 
 from blessed import Terminal
 from rich import print
-from rich.console import Console, Group
+from rich.console import Group
 from rich.live import Live
 from rich.panel import Panel
 from rich.table import Table
 
 from pyupgw import Client, Device, HvacDevice, SystemMode, create_client
+
+logger = logging.getLogger(__name__)
 
 HELP_PANEL = Panel(
     "(:arrow_up::arrow_down:) Select device, (O)ff, (H)eat, (+-) Adjust temperature, (Enter) Confirm"
@@ -59,7 +62,7 @@ class Application(contextlib.AbstractAsyncContextManager):
         for task in self._tasks:
             task.cancel()
 
-    async def tick(self, console: Console):
+    async def tick(self):
         """Handle application events"""
         done, pending = await asyncio.wait(
             self._tasks,
@@ -69,7 +72,10 @@ class Application(contextlib.AbstractAsyncContextManager):
         if self._inkey_task in done:
             self._handle_inkey_task()
         if self._get_change_task in done:
-            self._handle_get_change_task(console)
+            self._handle_get_change_task()
+        for task in done:
+            if ex := task.exception():
+                logger.error("Failed executing task: %r", task, exc_info=ex)
 
     def get_renderable(self):
         """Get application renderable"""
@@ -171,10 +177,10 @@ class Application(contextlib.AbstractAsyncContextManager):
         self._inkey_task = self._create_inkey_task()
         self._tasks.append(self._inkey_task)
 
-    def _handle_get_change_task(self, console: Console):
+    def _handle_get_change_task(self):
         assert self._get_change_task.done()
         changed_device, changes = self._get_change_task.result()
-        console.log(f"{changed_device.get_name()} changed:", changes)
+        logger.info(f"{changed_device.get_name()} changed: %r", changes)
         self._get_change_task = self._create_get_key_task()
         self._tasks.append(self._get_change_task)
 
@@ -184,7 +190,7 @@ async def _tui_main(term: Terminal, username: str, password: str):
         async with Application(client, term) as app:
             with Live(app.get_renderable()) as live:
                 while not app.done():
-                    await app.tick(live.console)
+                    await app.tick()
                     live.update(app.get_renderable(), refresh=True)
 
 

@@ -36,7 +36,7 @@ def _setup_logging_basic():
 
 
 def _setup_logging_file(config_file: str):
-    with open(config_file) as f:
+    with open(config_file, encoding="utf-8") as f:
         config = yaml.load(f, Loader=yaml.Loader)
     logging.config.dictConfig(config)
 

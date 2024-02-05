@@ -1,6 +1,9 @@
 Version 0.8
 -----------
 
+Date
+  2024-02-05
+
 Added
  * More flexible logging configuration
  * Timeout for publishing and receiving MQTT replies

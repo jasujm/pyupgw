@@ -1,3 +1,12 @@
+Version 0.8.1
+-------------
+
+Date
+  2024-02-05
+
+Changed
+ * Only log INFO level messages by ``pyupgw`` package in CLI application
+
 Version 0.8
 -----------
 

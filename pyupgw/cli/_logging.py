@@ -32,7 +32,8 @@ json.dumps = _new_json_dumps
 
 
 def _setup_logging_basic():
-    logging.basicConfig(level=logging.INFO, handlers=[RichHandler()])
+    logging.basicConfig(handlers=[RichHandler()])
+    logging.getLogger("pyupgw").setLevel(logging.INFO)
 
 
 def _setup_logging_file(config_file: str):

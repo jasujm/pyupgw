@@ -1,4 +1,5 @@
-Unreleased
+Version 0.8
+-----------
 
 Added
  * More flexible logging configuration

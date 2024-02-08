@@ -36,11 +36,15 @@ a file.
        formatter: file
        filename: pyupgw.log
    loggers:
-     pyupgw:
+     pyupgw.client:
        handlers:
          - console
          - file
        level: DEBUG
+     pyupgw.cli:
+       handlers:
+         - console
+       level: INFO
 
 The CLI can then be run with the configuration file provided as an option:
 
@@ -51,8 +55,7 @@ The CLI can then be run with the configuration file provided as an option:
 The requests and responses to and from the server are logged:
 
 - As ``repr()`` of the object in the log message
-- As base64 encoded pickled object in the ``request`` and ``response`` fields,
-  respectively
+- Structured JSON in ``request`` and ``response`` fields, respectively
 
 The latter format is useful for offline inspection the objects with Python
 scripts.

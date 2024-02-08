@@ -4,29 +4,15 @@ import asyncio
 import contextlib
 import functools
 import logging
-import operator
 import typing
 import uuid
-from collections.abc import Awaitable, Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 
 import aiohttp
-from attrs import define, field
-from awscrt.mqtt import QoS
-from awsiot.iotshadow import (
-    ErrorResponse,
-    GetShadowRequest,
-    GetShadowResponse,
-    GetShadowSubscriptionRequest,
-    IotShadowClient,
-    ShadowState,
-    UpdateShadowRequest,
-    UpdateShadowResponse,
-    UpdateShadowSubscriptionRequest,
-)
 from dict_deep import deep_get
 
-from ._api import AwsApi, AwsCredentialsProvider, ServiceApi
-from ._helpers import LazyEncode, async_future_helper
+from ._api import AwsApi, ServiceApi
+from ._mqtt import IotShadowMqtt
 from .errors import AuthenticationError, ClientError
 from .models import (
     Device,
@@ -98,12 +84,13 @@ _SHADOW_TO_ATTRIBUTES_MAP: list[tuple[str, str, Callable[[typing.Any], typing.An
 ]
 
 
-def _parse_shadow_attributes(shadow_state: Mapping[str, typing.Any]):
+def _parse_shadow_attributes(shadow_state: Mapping[str, typing.Any] | None):
+    properties = deep_get(shadow_state, ["state", "reported", "11", "properties"])
+    if not properties:
+        return {}
     ret = {}
     for attr_key, shadow_key, transform in _SHADOW_TO_ATTRIBUTES_MAP:
-        if (
-            value := deep_get(shadow_state, ["11", "properties", shadow_key])
-        ) is not None:
+        if (value := properties.get(shadow_key)) is not None:
             try:
                 ret[attr_key] = transform(value)
             except Exception as ex:  # pylint: disable=broad-exception-caught
@@ -131,7 +118,7 @@ def _create_shadow_update_attributes(changes: Mapping[str, typing.Any]):
     for attr_key, shadow_key, transform in _ATTRIBUTES_TO_SHADOW_MAP:
         if (value := changes.get(attr_key)) is not None:
             desired_properties[shadow_key] = transform(value)
-    return ShadowState(desired={"11": {"properties": desired_properties}})
+    return {"state": {"desired": {"11": {"properties": desired_properties}}}}
 
 
 async def _construct_client_data(id_token: str, access_token: str, client: "Client"):
@@ -155,7 +142,7 @@ async def _construct_client_data(id_token: str, access_token: str, client: "Clie
                 "Fetched details for gateway %s: %r",
                 attributes.id,
                 slider_details,
-                extra={"response": LazyEncode(slider_details)},
+                extra={"response": slider_details},
             )
             gateways.append(
                 Gateway(
@@ -172,7 +159,7 @@ async def _construct_client_data(id_token: str, access_token: str, client: "Clie
         logger.debug(
             "Fetched list of gateways: %r",
             slider_list,
-            extra={"response": LazyEncode(slider_list)},
+            extra={"response": slider_list},
         )
         for gateway_data in slider_list["data"]:
             if gateway_data.get("type") == "gateway":
@@ -188,93 +175,20 @@ def _create_service_api():
     return ServiceApi()
 
 
-class _CredentialsStore:
-    """Cache and rotate AWS credentials"""
-
-    def __init__(self, api: AwsApi):
-        self._api = api
-        self._credentials_providers: dict[uuid.UUID, AwsCredentialsProvider] = {}
-        self._wrapped_credentials_providers: dict[uuid.UUID, AwsCredentialsProvider] = (
-            {}
-        )
-
-    def credentials_provider_for_occupant(self, occupant: Occupant):
-        """Get credentials provider for an occupant"""
-        credentials_provider = self._credentials_providers.get(occupant.id)
-        if not credentials_provider:
-            wrapped_credentials_provider = self._api.get_credentials_provider(
-                occupant.identity_id
-            )
-            self._wrapped_credentials_providers[occupant.id] = (
-                wrapped_credentials_provider
-            )
-            credentials_provider = self._create_credentials_provider(occupant)
-            self._credentials_providers[occupant.id] = credentials_provider
-        return credentials_provider
-
-    def _create_credentials_provider(self, occupant: Occupant):
-        return AwsCredentialsProvider.new_delegate(
-            functools.partial(self._get_credentials, occupant)
-        )
-
-    def _get_credentials(self, occupant: Occupant):
-        token_expired = self._api.check_token()
-        if token_expired:
-            wrapped_credentials_provider = self._api.get_credentials_provider(
-                occupant.identity_id
-            )
-            self._wrapped_credentials_providers[occupant.id] = (
-                wrapped_credentials_provider
-            )
-        else:
-            wrapped_credentials_provider = self._wrapped_credentials_providers[
-                occupant.id
-            ]
-        return wrapped_credentials_provider.get_credentials().result()
-
-
-@define
-class _ClientData:
-    client: IotShadowClient
-    device_code: str
-    child_device_codes: list[str]
-    reinitialize_connection_task: asyncio.Task | None = field(default=None)
-
-
 class _MqttClientManager(contextlib.AbstractAsyncContextManager):
     """Manage shadow clients for devices"""
 
-    def __init__(
-        self,
-        aws: AwsApi,
-        credentials_store: _CredentialsStore,
-        dispatch_reinitialize: Callable[[Occupant], Awaitable[IotShadowClient]],
-    ):
+    def __init__(self, aws: AwsApi):
         self._aws = aws
-        self._credentials_store = credentials_store
-        self._dispatch_reinitialize = dispatch_reinitialize
-        self._on_update_callbacks: list[
-            Callable[[str, str, UpdateShadowResponse], None]
-        ] = []
-        self._client_data: dict[uuid.UUID, _ClientData] = {}
-        self._pending_responses: dict[str, asyncio.Future] = {}
+        self._on_update_callbacks: list[Callable[[str, str, dict | None], None]] = []
+        self._clients: dict[str, IotShadowMqtt] = {}
         self._loop = asyncio.get_running_loop()
+        self._exit_stack = contextlib.AsyncExitStack()
 
     async def __aexit__(self, exc_type, exc_value, traceback):
-        for client_data in self._client_data.values():
-            if (
-                reinitialize_connection_task := client_data.reinitialize_connection_task
-            ) is not None:
-                reinitialize_connection_task.cancel()
-        async with asyncio.TaskGroup() as task_group:
-            for client_data in self._client_data.values():
-                task_group.create_task(
-                    async_future_helper(client_data.client.mqtt_connection.disconnect)
-                )
+        await self._exit_stack.aclose()
 
-    def register_callback(
-        self, callback: Callable[[str, str, GetShadowResponse], None]
-    ):
+    def register_callback(self, callback: Callable[[str, str, dict | None], None]):
         """Register callback that will be invoked when device state is updated
 
         The arguments to the callback will be the gateway device code, child
@@ -282,7 +196,7 @@ class _MqttClientManager(contextlib.AbstractAsyncContextManager):
         """
         self._on_update_callbacks.append(callback)
 
-    def remove_callback(self, callback: Callable[[str, str, GetShadowResponse], None]):
+    def remove_callback(self, callback: Callable[[str, str, dict | None], None]):
         """Remove previously registered callback"""
         self._on_update_callbacks.remove(callback)
 
@@ -291,218 +205,31 @@ class _MqttClientManager(contextlib.AbstractAsyncContextManager):
         occupant: Occupant,
         device_code: str,
         child_device_codes: list[str],
-    ) -> IotShadowClient:
+    ) -> IotShadowMqtt:
         """Get shadow client for a given gateway"""
-        client_data = self._client_data.get(occupant.id)
-        if client_data:
-            return client_data.client
-        client = await self._build_shadow_client_with_subscriptions(
-            occupant, device_code, child_device_codes
+        if existing_client := self._clients.get(device_code):
+            return existing_client
+        bound_on_response_state_received = functools.partial(
+            self._on_response_state_received, device_code
         )
-        self._client_data[occupant.id] = _ClientData(
-            client=client,
-            device_code=device_code,
-            child_device_codes=child_device_codes,
+        client = await self._exit_stack.enter_async_context(
+            IotShadowMqtt(
+                aws=self._aws,
+                identity_id=occupant.identity_id,
+                client_name=device_code,
+                thing_names=child_device_codes,
+                loop=self._loop,
+                on_response_state_received=bound_on_response_state_received,
+            )
         )
+        self._clients[device_code] = client
         return client
 
-    @contextlib.asynccontextmanager
-    async def publishing(self):
-        """Publishing context that helps waiting for reply"""
-        client_token = str(uuid.uuid4())
-        exit_stack = contextlib.ExitStack()
-
-        async def wrap_publish(
-            publish: Callable[[typing.Any, QoS], "concurrent.futures.Future"],
-            request: typing.Any,
-        ):
-            loop = asyncio.get_running_loop()
-            response_future = loop.create_future()
-            self._pending_responses[client_token] = response_future
-            exit_stack.callback(self._pending_responses.pop, client_token)
-            await async_future_helper(publish, request, QoS.AT_MOST_ONCE)
-            return await response_future
-
-        with exit_stack:
-            async with asyncio.timeout(PUBLISHING_TIMEOUT):
-                yield wrap_publish, client_token
-
-    async def _build_shadow_client_with_subscriptions(
-        self,
-        occupant: Occupant,
-        device_code: str,
-        child_device_codes: Iterable[str],
+    def _on_response_state_received(
+        self, device_code: str, child_device_code: str, response: dict | None
     ):
-        loop = asyncio.get_running_loop()
-        async with asyncio.timeout(CONNECTION_TIMEOUT):
-            credentials_provider = await asyncio.to_thread(
-                self._credentials_store.credentials_provider_for_occupant,
-                occupant,
-            )
-            shadow_client = await self._aws.get_iot_shadow_client(
-                device_code,
-                credentials_provider,
-                on_connection_resumed=functools.partial(
-                    self._on_connection_resumed, occupant=occupant
-                ),
-                on_connection_interrupted=functools.partial(
-                    self._on_connection_interrupted, occupant=occupant
-                ),
-            )
-        async with asyncio.TaskGroup() as task_group:
-            for child_device_code in child_device_codes:
-                bound_on_get = functools.partial(
-                    loop.call_soon_threadsafe,
-                    self._on_get_callback,
-                )
-                bound_on_update = functools.partial(
-                    loop.call_soon_threadsafe,
-                    self._on_update_callback,
-                    device_code,
-                    child_device_code,
-                )
-                bound_on_error = functools.partial(
-                    loop.call_soon_threadsafe,
-                    self._on_error_callback,
-                )
-                task_group.create_task(
-                    async_future_helper(
-                        shadow_client.subscribe_to_get_shadow_accepted,
-                        GetShadowSubscriptionRequest(thing_name=child_device_code),
-                        QoS.AT_MOST_ONCE,
-                        bound_on_get,
-                        getter=operator.itemgetter(0),
-                    )
-                )
-                task_group.create_task(
-                    async_future_helper(
-                        shadow_client.subscribe_to_get_shadow_rejected,
-                        GetShadowSubscriptionRequest(thing_name=child_device_code),
-                        QoS.AT_MOST_ONCE,
-                        bound_on_error,
-                        getter=operator.itemgetter(0),
-                    )
-                )
-                task_group.create_task(
-                    async_future_helper(
-                        shadow_client.subscribe_to_update_shadow_accepted,
-                        UpdateShadowSubscriptionRequest(thing_name=child_device_code),
-                        QoS.AT_MOST_ONCE,
-                        bound_on_update,
-                        getter=operator.itemgetter(0),
-                    )
-                )
-                task_group.create_task(
-                    async_future_helper(
-                        shadow_client.subscribe_to_update_shadow_rejected,
-                        UpdateShadowSubscriptionRequest(thing_name=child_device_code),
-                        QoS.AT_MOST_ONCE,
-                        bound_on_error,
-                        getter=operator.itemgetter(0),
-                    )
-                )
-        return shadow_client
-
-    def _resolve_response_future(
-        self,
-        response: GetShadowResponse | UpdateShadowResponse,
-    ):
-        if (
-            (client_token := response.client_token)
-            and (response_future := self._pending_responses.get(client_token))
-            and not response_future.done()
-        ):
-            response_future.set_result(response)
-
-    def _on_error_callback(
-        self,
-        response: ErrorResponse,
-    ):
-        if (
-            (client_token := response.client_token)
-            and (response_future := self._pending_responses.get(client_token))
-            and not response_future.done()
-        ):
-            response_future.set_exception(
-                ClientError(f"Request rejected: {response.message} ({response.code})")
-            )
-
-    def _on_get_callback(
-        self,
-        response: GetShadowResponse,
-    ):
-        self._resolve_response_future(response)
-
-    def _on_update_callback(
-        self,
-        device_code: str,
-        child_device_code: str,
-        response: UpdateShadowResponse,
-    ):
-        self._resolve_response_future(response)
         for callback in self._on_update_callbacks:
             callback(device_code, child_device_code, response)
-
-    # The reconnection logic is complicated...  I've noticed empirically that
-    # AWS SDK does not always resume connection, so in addition to relying on
-    # SDK resuming it, we periodically try to reinitialize the client.
-
-    def _on_connection_interrupted(self, occupant: Occupant, **_kwargs):
-        logger.warning("Lost connection for %s", occupant.id)
-        client_data = self._client_data[occupant.id]
-
-        async def _reinitialize_connection():
-            reinitialize_delay = REINITIALIZE_DELAY
-            while True:
-                await asyncio.sleep(reinitialize_delay)
-                try:
-                    logger.debug(
-                        "Attempting to reinitialize connection for %s", occupant.id
-                    )
-                    client = await self._build_shadow_client_with_subscriptions(
-                        occupant,
-                        client_data.device_code,
-                        client_data.child_device_codes,
-                    )
-                except Exception:  # pylint: disable=broad-exception-caught
-                    logger.debug(
-                        "Failed to reinitialize connection for %s",
-                        occupant.id,
-                        exc_info=True,
-                    )
-                else:
-                    logger.info("Reinitialized connection for %s", occupant.id)
-                    old_client = client_data.client
-                    client_data.client = client
-                    await self._dispatch_reinitialize(occupant)
-                    await async_future_helper(old_client.mqtt_connection.disconnect)
-                    client_data.reinitialize_connection_task = None
-                    break
-                reinitialize_delay = min(
-                    reinitialize_delay + REINITIALIZE_DELAY, MAX_REINITIALIZE_DELAY
-                )
-
-        def _create_reinitialize_task():
-            client_data.reinitialize_connection_task = self._loop.create_task(
-                _reinitialize_connection()
-            )
-
-        if client_data.reinitialize_connection_task is None:
-            self._loop.call_soon_threadsafe(_create_reinitialize_task)
-
-    def _on_connection_resumed(self, occupant: Occupant, **_kwargs):
-        logger.info("Resumed connection for %s", occupant.id)
-        client_data = self._client_data[occupant.id]
-        if (
-            reinitialize_connection_task := client_data.reinitialize_connection_task
-        ) is not None:
-
-            def _cancel_reinitialize_task():
-                reinitialize_connection_task.cancel()
-                client_data.reinitialize_connection_task = None
-                self._loop.create_task(self._dispatch_reinitialize(occupant))
-
-            self._loop.call_soon_threadsafe(_cancel_reinitialize_task)
 
 
 class Client(contextlib.AbstractAsyncContextManager):
@@ -527,10 +254,7 @@ class Client(contextlib.AbstractAsyncContextManager):
         self._exit_stack = contextlib.AsyncExitStack()
         self._aws = aws
         self._gateways: list[Gateway] = []
-        self._credentials_store = _CredentialsStore(aws)
-        self._mqtt_client_manager = _MqttClientManager(
-            aws, self._credentials_store, self._refresh_all_for_occupant
-        )
+        self._mqtt_client_manager = _MqttClientManager(aws)
         self._exit_stack.push_async_exit(self._mqtt_client_manager)
         self._mqtt_client_manager.register_callback(self._on_update_device)
         self._exit_stack.callback(
@@ -600,30 +324,16 @@ class Client(contextlib.AbstractAsyncContextManager):
           ClientError: if the request to get device state fails
         """
         client = await self._mqtt_client_for_gateway(gateway)
-        async with self._mqtt_client_manager.publishing() as (
-            wrap_publish,
-            client_token,
-        ):
-            request = GetShadowRequest(
-                thing_name=device.get_device_code(), client_token=client_token
-            )
-            logger.debug(
-                "Publishing get shadow request for %s: %r",
-                device.get_device_code(),
-                request,
-                extra={"request": LazyEncode(request)},
-            )
-            try:
-                response = await wrap_publish(client.publish_get_shadow, request)
-            except Exception as ex:  # pylint: disable=broad-exception-caught
-                raise ClientError(f"Failed to refresh {device.get_name()}") from ex
-            logger.debug(
-                "Get shadow response for %s: %r",
-                device.get_device_code(),
-                response,
-                extra={"response": LazyEncode(response)},
-            )
-        changes = _parse_shadow_attributes(response.state.reported)
+        device_code = device.get_device_code()
+        logger.debug("Requesting get device state for %s", device_code)
+        response = await client.get(device.get_device_code())
+        logger.debug(
+            "Get device state response for %s: %r",
+            device_code,
+            response,
+            extra={"response": response},
+        )
+        changes = _parse_shadow_attributes(response)
         device.set_attributes(changes)
 
     async def update_device_state(
@@ -652,25 +362,15 @@ class Client(contextlib.AbstractAsyncContextManager):
           ClientError: if the request to update device state fails
         """
         client = await self._mqtt_client_for_gateway(gateway)
-        async with self._mqtt_client_manager.publishing() as (
-            wrap_publish,
-            client_token,
-        ):
-            request = UpdateShadowRequest(
-                client_token=client_token,
-                thing_name=device.get_device_code(),
-                state=_create_shadow_update_attributes(changes),
-            )
-            logger.debug(
-                "Publishing update shadow request for %s: %r",
-                device.get_device_code(),
-                request,
-                extra={"request": LazyEncode(request)},
-            )
-            try:
-                await wrap_publish(client.publish_update_shadow, request)
-            except Exception as ex:  # pylint: disable=broad-exception-caught
-                raise ClientError(f"Failed to update {device.get_name()}") from ex
+        device_code = device.get_device_code()
+        request = _create_shadow_update_attributes(changes)
+        logger.debug(
+            "Requesting update device state for %s: %r",
+            device_code,
+            request,
+            extra={"request": request},
+        )
+        await client.update(device_code, request)
 
     async def _mqtt_client_for_gateway(self, gateway: Gateway):
         return await self._mqtt_client_manager.client_for_gateway(
@@ -683,20 +383,19 @@ class Client(contextlib.AbstractAsyncContextManager):
         self,
         device_code: str,
         child_device_code: str,
-        response: GetShadowResponse | UpdateShadowResponse,
+        response: dict | None,
     ):
         logger.debug(
-            "Received update for %s in %s: %r",
+            "Received update device state for %s: %r",
             child_device_code,
-            device_code,
             response,
-            extra={"response": LazyEncode(response)},
+            extra={"response": response},
         )
         for gateway in self._gateways:
             if gateway.get_device_code() == device_code:
                 for child in gateway.get_children():
                     if child.get_device_code() == child_device_code:
-                        changes = _parse_shadow_attributes(response.state.reported)
+                        changes = _parse_shadow_attributes(response)
                         child.set_attributes(changes)
 
     async def _refresh_all_for_occupant(self, occupant: Occupant):

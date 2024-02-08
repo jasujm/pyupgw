@@ -7,23 +7,16 @@ used directly.  Breaking changes may be introduced between minor versions.
 
 # pylint: disable=too-many-arguments
 
-import asyncio
 import contextlib
-import functools
 import os
 import threading
 import typing
-import uuid
 from collections.abc import Awaitable
 
 import aiohttp
 from awscrt.auth import AwsCredentialsProvider
 from awscrt.io import ClientTlsContext, TlsContextOptions
-from awsiot.iotshadow import IotShadowClient
-from awsiot.mqtt_connection_builder import websockets_with_default_aws_signing
 from pycognito import Cognito
-
-from ._helpers import async_future_helper
 
 PYUPGW_AWS_CLIENT_ID = os.getenv(
     "PYUPGW_AWS_CLIENT_ID", default="63qkc36u3eje4lp8ums9njmarv"
@@ -112,30 +105,6 @@ class AwsApi:
             logins=[(self._id_provider, self._cognito.id_token)],
             tls_ctx=_tls_ctx,
         )
-
-    async def get_iot_shadow_client(
-        self,
-        device_code: str,
-        credentials_provider: AwsCredentialsProvider,
-        on_connection_resumed=None,
-        on_connection_interrupted=None,
-    ):
-        """Get shadow client for a device"""
-        mqtt_connection = await asyncio.to_thread(
-            functools.partial(
-                websockets_with_default_aws_signing,
-                endpoint=self._iot_endpoint,
-                region=self._region,
-                credentials_provider=credentials_provider,
-                client_id=f"{device_code}-{uuid.uuid4()}",
-                clean_session=False,
-                keep_alive_secs=30,
-                on_connection_resumed=on_connection_resumed,
-                on_connection_interrupted=on_connection_interrupted,
-            )
-        )
-        await async_future_helper(mqtt_connection.connect)
-        return IotShadowClient(mqtt_connection)
 
 
 class ServiceApi:

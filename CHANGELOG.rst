@@ -1,3 +1,9 @@
+Unreleased
+----------
+
+Changed
+ * Migrate MQTT implementation from ``awsiotsdk`` to `paho.mqtt`
+
 Version 0.8.1
 -------------
 

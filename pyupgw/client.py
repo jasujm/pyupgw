@@ -31,6 +31,7 @@ if typing.TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+
 def _parse_device_attributes(data):
     return {
         "id": uuid.UUID(data["id"]),
@@ -324,7 +325,7 @@ class Client(contextlib.AbstractAsyncContextManager):
         try:
             response = await client.get(device.get_device_code())
         except Exception as ex:
-            raise ClientError("Unable to request state for %s", device_code) from ex
+            raise ClientError(f"Unable to request state for {device_code}") from ex
         logger.debug(
             "Get device state response for %s: %r",
             device_code,
@@ -371,7 +372,9 @@ class Client(contextlib.AbstractAsyncContextManager):
         try:
             await client.update(device_code, request)
         except Exception as ex:
-            raise ClientError("Unable to update device state for %s", device_code) from ex
+            raise ClientError(
+                f"Unable to update device state for {device_code}"
+            ) from ex
 
     async def _mqtt_client_for_gateway(self, gateway: Gateway):
         return await self._mqtt_client_manager.client_for_gateway(

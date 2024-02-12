@@ -2,8 +2,8 @@
 
 import asyncio
 import contextlib
-import itertools
 import functools
+import itertools
 import json
 import logging
 import re
@@ -31,6 +31,7 @@ AWS_TOPIC_RE = re.compile(
 )
 MQTT_KEEPALIVE = 30
 PUBLISHING_TIMEOUT = 60
+
 
 def _aws_shadow_topic(thing_name: str, command: str, result: str | None = None):
     suffix = f"/{result}" if result is not None else ""

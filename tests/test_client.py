@@ -36,16 +36,6 @@ class _MockAws:
     check_token: unittest.mock.Mock
     get_tokens: unittest.mock.Mock
     get_credentials_provider: unittest.mock.Mock
-    get_iot_shadow_client: unittest.mock.AsyncMock
-
-
-@define
-class _MockShadowClient:
-    subscribe_to_get_shadow_accepted: unittest.mock.Mock
-    subscribe_to_update_shadow_accepted: unittest.mock.Mock
-    publish_get_shadow: unittest.mock.Mock
-    publish_update_shadow: unittest.mock.Mock
-    mqtt_connection: unittest.mock.MagicMock
 
 
 def _instant_future(result):
@@ -54,34 +44,15 @@ def _instant_future(result):
     return future
 
 
-def _mock_aws(monkeypatch) -> tuple[_MockAws, _MockShadowClient]:
-    mock_shadow_client = _MockShadowClient(
-        subscribe_to_get_shadow_accepted=unittest.mock.Mock(
-            side_effect=lambda *_, **__: (_instant_future(None), 0)
-        ),
-        subscribe_to_update_shadow_accepted=unittest.mock.Mock(
-            side_effect=lambda *_, **__: (_instant_future(None), 0)
-        ),
-        publish_get_shadow=unittest.mock.Mock(
-            side_effect=lambda *_, **__: _instant_future(None)
-        ),
-        publish_update_shadow=unittest.mock.Mock(
-            side_effect=lambda *_, **__: _instant_future(None)
-        ),
-        mqtt_connection=unittest.mock.MagicMock(),
-    )
-    mock_shadow_client.mqtt_connection.disconnect.side_effect = lambda: _instant_future(
-        None
-    )
+def _mock_aws(monkeypatch) -> _MockAws:
     mock_aws = _MockAws(
         authenticate=unittest.mock.Mock(return_value=(ID_TOKEN, ACCESS_TOKEN)),
         check_token=unittest.mock.Mock(return_value=False),
         get_tokens=unittest.mock.Mock(return_value=(ID_TOKEN, ACCESS_TOKEN)),
         get_credentials_provider=unittest.mock.Mock(return_value=object()),
-        get_iot_shadow_client=unittest.mock.AsyncMock(return_value=mock_shadow_client),
     )
     monkeypatch.setattr(pyupgw.client, "_create_aws_api", lambda username: mock_aws)
-    return mock_aws, mock_shadow_client
+    return mock_aws
 
 
 @define
@@ -153,16 +124,16 @@ def client_setup():
     @contextlib.contextmanager
     def context(gateways: list[GatewayData]):
         with pytest.MonkeyPatch().context() as m:
-            aws, shadow_client = _mock_aws(m)
+            aws = _mock_aws(m)
             service_api = _mock_service_api(m, gateways)
-            yield aws, service_api, shadow_client
+            yield aws, service_api
 
     return context
 
 
 @pytest.mark.asyncio
 async def test_authenticate_with_success(client_setup):
-    with client_setup([]) as (aws, _, _):
+    with client_setup([]) as (aws, _):
         api = await create_api(USERNAME, PASSWORD)
     assert api is aws
     aws.authenticate.assert_called_with(PASSWORD)
@@ -174,7 +145,7 @@ class NotAuthorized(Exception):
 
 @pytest.mark.asyncio
 async def test_authenticate_with_failure(client_setup):
-    with client_setup([]) as (aws, _, _):
+    with client_setup([]) as (aws, _):
         aws.authenticate.side_effect = NotAuthorized("wrong password")
         with pytest.raises(AuthenticationError):
             await create_api(USERNAME, PASSWORD)
@@ -200,7 +171,7 @@ async def test_authenticate_with_failure(client_setup):
     )
 )
 async def test_get_gateways(gateways: list[GatewayData], client_setup):
-    with client_setup(gateways) as (aws, service_api, _):
+    with client_setup(gateways) as (aws, service_api):
         async with create_client(USERNAME, PASSWORD) as client:
             for (
                 expected_attributes,

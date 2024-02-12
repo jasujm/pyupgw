@@ -30,11 +30,6 @@ if typing.TYPE_CHECKING:
     import concurrent.futures
 
 logger = logging.getLogger(__name__)
-REINITIALIZE_DELAY = 60
-MAX_REINITIALIZE_DELAY = 300
-CONNECTION_TIMEOUT = 60
-PUBLISHING_TIMEOUT = 60
-
 
 def _parse_device_attributes(data):
     return {
@@ -326,7 +321,10 @@ class Client(contextlib.AbstractAsyncContextManager):
         client = await self._mqtt_client_for_gateway(gateway)
         device_code = device.get_device_code()
         logger.debug("Requesting get device state for %s", device_code)
-        response = await client.get(device.get_device_code())
+        try:
+            response = await client.get(device.get_device_code())
+        except Exception as ex:
+            raise ClientError("Unable to request state for %s", device_code) from ex
         logger.debug(
             "Get device state response for %s: %r",
             device_code,
@@ -370,7 +368,10 @@ class Client(contextlib.AbstractAsyncContextManager):
             request,
             extra={"request": request},
         )
-        await client.update(device_code, request)
+        try:
+            await client.update(device_code, request)
+        except Exception as ex:
+            raise ClientError("Unable to update device state for %s", device_code) from ex
 
     async def _mqtt_client_for_gateway(self, gateway: Gateway):
         return await self._mqtt_client_manager.client_for_gateway(

@@ -56,12 +56,10 @@ class AwsApi:
         user_pool_id: str | None = None,
         id_provider: str | None = None,
         identity_endpoint: str | None = None,
-        iot_endpoint: str | None = None,
     ):
         self._region = region or PYUPGW_AWS_REGION
         self._id_provider = id_provider or PYUPGW_AWS_ID_PROVIDER
         self._identity_endpoint = identity_endpoint or PYUPGW_AWS_IDENTITY_ENDPOINT
-        self._iot_endpoint = iot_endpoint or PYUPGW_AWS_IOT_ENDPOINT
         self._cognito = Cognito(
             user_pool_id=user_pool_id or PYUPGW_AWS_USER_POOL_ID,
             client_id=client_id or PYUPGW_AWS_CLIENT_ID,

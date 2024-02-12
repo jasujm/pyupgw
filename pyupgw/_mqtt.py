@@ -3,6 +3,7 @@
 import asyncio
 import contextlib
 import itertools
+import functools
 import json
 import logging
 import re
@@ -12,7 +13,7 @@ from collections.abc import Callable
 
 from awscrt.auth import AwsSigningConfig, aws_sign_request
 from awscrt.http import HttpHeaders, HttpRequest
-from paho.mqtt.client import Client
+from paho.mqtt.client import MQTT_ERR_SUCCESS, Client
 
 from ._api import PYUPGW_AWS_IOT_ENDPOINT, PYUPGW_AWS_REGION, AwsApi
 from .errors import ClientError
@@ -28,7 +29,8 @@ AWS_TOPIC_REJECTED = "rejected"
 AWS_TOPIC_RE = re.compile(
     r"\$aws/things/([\w-]+)/shadow/(get|update)/(accepted|rejected)"
 )
-
+MQTT_KEEPALIVE = 30
+PUBLISHING_TIMEOUT = 60
 
 def _aws_shadow_topic(thing_name: str, command: str, result: str | None = None):
     suffix = f"/{result}" if result is not None else ""
@@ -65,11 +67,11 @@ class IotShadowMqtt(
         self._loop = loop
         self._client: Client | None = None
         self._publish_lock = threading.Lock()
-        self._quit_event = threading.Event()
         self._async_initialized_event = asyncio.Event()
         self._async_quit_done_event = asyncio.Event()
         self._thread = threading.Thread(target=self._mqtt_loop)
         self._pending_publish_futures: dict[str, asyncio.Future] = {}
+        self._pending_tasks: list[asyncio.Task] = []
 
     async def __aenter__(self):
         self._thread.start()
@@ -77,9 +79,11 @@ class IotShadowMqtt(
         return self
 
     async def __aexit__(self, exc_type, exc_value, traceback):
+        for task in self._pending_tasks:
+            task.cancel()
         for future in self._pending_publish_futures.values():
             future.cancel()
-        self._quit_event.set()
+        self._client.disconnect()
         await self._async_quit_done_event.wait()
         self._thread.join()
 
@@ -120,15 +124,13 @@ class IotShadowMqtt(
         client.on_message = self._on_message
         client.on_connect = self._on_connect
         client.on_subscribe = self._on_subscribe
-        client.connect(PYUPGW_AWS_IOT_ENDPOINT, 443)
-        while not self._quit_event.is_set():
-            client.loop()
-        with self._publish_lock:
-            client.disconnect()
+        client.on_disconnect = self._on_disconnect
+        client.connect(PYUPGW_AWS_IOT_ENDPOINT, 443, keepalive=MQTT_KEEPALIVE)
+        client.loop_forever()
         self._loop.call_soon_threadsafe(self._async_quit_done_event.set)
 
     def _on_connect(self, client, _userdata, _flags, _rc):
-        logger.debug("Client connected")
+        logger.info("MQTT client connected")
         client.subscribe(
             [
                 (_aws_shadow_topic(thing_name, command, result), 0)
@@ -141,9 +143,13 @@ class IotShadowMqtt(
         )
 
     def _on_subscribe(self, client, _userdata, _mid, _granted_qos):
-        logger.debug("Subscribe completed")
+        logger.info("MQTT client subscribed to topics")
         with self._publish_lock:
             self._client = client
+        # We are here after reconnecting. Request new state from devices.
+        if self._async_initialized_event.is_set():
+            for thing_name in self._thing_names:
+                self._loop.call_soon_threadsafe(self._async_get, thing_name)
         self._loop.call_soon_threadsafe(self._async_initialized_event.set)
 
     def _on_message(self, _client, _userdata, message):
@@ -162,6 +168,12 @@ class IotShadowMqtt(
                 )
             elif result == AWS_TOPIC_REJECTED:
                 self._loop.call_soon_threadsafe(self._rejected_callback, parsed_payload)
+
+    def _on_disconnect(self, _client, _userdata, rc):
+        if rc != MQTT_ERR_SUCCESS:
+            logger.warning("MQTT client unexpectedly disconnected with code %r", rc)
+        else:
+            logger.info("MQTT client disconnected")
 
     def _accepted_callback(self, thing_name: str, payload: dict | None):
         if publish_future := self._get_pending_publish_future_for_response(payload):
@@ -189,8 +201,9 @@ class IotShadowMqtt(
         publish_future = self._loop.create_future()
         self._pending_publish_futures[client_token] = publish_future
         try:
-            await asyncio.to_thread(self._do_publish, topic, json.dumps(payload))
-            return await publish_future
+            async with asyncio.timeout(PUBLISHING_TIMEOUT):
+                await asyncio.to_thread(self._do_publish, topic, json.dumps(payload))
+                return await publish_future
         finally:
             self._pending_publish_futures.pop(client_token, None)
 
@@ -200,3 +213,8 @@ class IotShadowMqtt(
                 raise ClientError("MQTT client not initialized")
             logger.debug("Publishing message to %s: %r", topic, payload)
             self._client.publish(topic, payload)
+
+    def _async_get(self, thing_name: str):
+        task = self._loop.create_task(self.get(thing_name))
+        self._pending_tasks.append(task)
+        task.add_done_callback(functools.partial(self._pending_tasks.remove, task))

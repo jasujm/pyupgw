@@ -2,7 +2,6 @@
 
 import asyncio
 import contextlib
-import functools
 import itertools
 import json
 import logging
@@ -72,7 +71,7 @@ class IotShadowMqtt(
         self._async_quit_done_event = asyncio.Event()
         self._thread = threading.Thread(target=self._mqtt_loop)
         self._pending_publish_futures: dict[str, asyncio.Future] = {}
-        self._pending_tasks: list[asyncio.Task] = []
+        self._pending_tasks: set[asyncio.Task] = set()
 
     async def __aenter__(self):
         self._thread.start()
@@ -217,5 +216,5 @@ class IotShadowMqtt(
 
     def _async_get(self, thing_name: str):
         task = self._loop.create_task(self.get(thing_name))
-        self._pending_tasks.append(task)
-        task.add_done_callback(functools.partial(self._pending_tasks.remove, task))
+        self._pending_tasks.add(task)
+        task.add_done_callback(self._pending_tasks.discard)

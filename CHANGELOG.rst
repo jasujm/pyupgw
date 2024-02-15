@@ -1,3 +1,9 @@
+Unreleased
+----------
+
+Fixed
+ * Fix handling of background tasks in MQTT client
+
 Version 0.9
 -----------
 

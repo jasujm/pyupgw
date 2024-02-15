@@ -1,5 +1,8 @@
-Unreleased
-----------
+Version 0.10
+------------
+
+Date
+  2024-02-15
 
 Changed
  * Reauthenticate to cloud service with password if the refresh token is no

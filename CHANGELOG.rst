@@ -1,6 +1,10 @@
 Unreleased
 ----------
 
+Changed
+ * Reauthenticate to cloud service with password if the refresh token is no
+   longer valid
+
 Fixed
  * Fix handling of background tasks in MQTT client
 

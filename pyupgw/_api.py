@@ -16,6 +16,7 @@ from collections.abc import Awaitable
 import aiohttp
 from awscrt.auth import AwsCredentialsProvider
 from awscrt.io import ClientTlsContext, TlsContextOptions
+from dict_deep import deep_get
 from pycognito import Cognito
 
 PYUPGW_AWS_CLIENT_ID = os.getenv(
@@ -45,6 +46,19 @@ PYUPGW_SERVICE_API_COMPANY = os.getenv("PYUPGW_SERVICE_API_COMPANY", default="pu
 _tls_ctx = ClientTlsContext(TlsContextOptions())
 
 
+def is_authentication_error(ex: Exception):
+    """
+    Return ``True`` if ``ex`` is authentication error, ``False`` otherwise
+
+    This function is necessary, because botocore generates exception types on
+    the fly, so it's not possible to just import the correct exception type and
+    except it...
+    """
+    return "NotAuthorized" in str(
+        deep_get(ex, ["__class__", "__name__"], getter=getattr)
+    )
+
+
 class AwsApi:
     """Low level AWS API"""
 
@@ -66,6 +80,7 @@ class AwsApi:
             username=username,
         )
         self._identity_lock = threading.Lock()
+        self._cached_password: str | None = None
 
     def authenticate(self, password: str) -> tuple[str, str]:
         """Authenticate with ``password``
@@ -75,6 +90,7 @@ class AwsApi:
         """
         with self._identity_lock:
             self._cognito.authenticate(password)
+            self._cached_password = password
         return self._cognito.id_token, self._cognito.access_token
 
     def check_token(self):
@@ -84,7 +100,14 @@ class AwsApi:
           ``True`` if the token was refreshed, ``False`` otherwise
         """
         with self._identity_lock:
-            return self._cognito.check_token(renew=True)
+            try:
+                return self._cognito.check_token(renew=True)
+            except Exception as ex:
+                # Fallback to authenticating with password if refresh token  fails
+                if is_authentication_error(ex) and self._cached_password is not None:
+                    self._cognito.authenticate(self._cached_password)
+                    return True
+                raise
 
     def get_tokens(self) -> tuple[str, str]:
         """Get identity and access tokens from a previous authentication

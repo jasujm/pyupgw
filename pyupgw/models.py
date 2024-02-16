@@ -40,10 +40,19 @@ class DeviceAttributes:
     """Common device attributes"""
 
     id: uuid.UUID
+    """Device id assigned by the cloud service"""
+
     type: DeviceType
+    """Device type"""
+
     device_code: str
+    """Device code"""
+
     model: str
+    """Device model"""
+
     name: str
+    """Device name"""
 
 
 @define
@@ -51,7 +60,10 @@ class Occupant:
     """Occupant of a managed device"""
 
     id: uuid.UUID
+    """Occupant id"""
+
     identity_id: str
+    """Cognito identity of the occupant"""
 
 
 @define
@@ -59,7 +71,15 @@ class GatewayAttributes(DeviceAttributes):
     """Gateway attributes"""
 
     type: typing.Literal[DeviceType.GATEWAY]
+
     occupant: Occupant
+    """Gateway occupant"""
+
+    ip_address: str | None = field(default=None)
+    """IP address of the gateway"""
+
+    mac_address: str | None = field(default=None)
+    """MAC address of the gateway"""
 
 
 @define

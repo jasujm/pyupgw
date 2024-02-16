@@ -1,3 +1,16 @@
+Unreleased
+----------
+
+Added
+ * Add ``firmware_version``, ``mac_address`` and ``ip_address`` fields to the
+   gateway model
+
+Changed
+ * Make model attributes keyword only
+
+Fixed
+ * Do not initialize multiple MQTT connections for a gateway
+
 Version 0.10
 ------------
 

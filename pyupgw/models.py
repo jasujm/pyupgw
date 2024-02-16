@@ -35,7 +35,7 @@ class RunningState(enum.Enum):
     HEATING = 1
 
 
-@define
+@define(kw_only=True)
 class DeviceAttributes:
     """Common device attributes"""
 
@@ -53,6 +53,9 @@ class DeviceAttributes:
 
     name: str
     """Device name"""
+
+    firmware_version: str | None = field(default=None)
+    """Firmware version"""
 
 
 @define
@@ -93,9 +96,6 @@ class HvacAttributes(DeviceAttributes):
 
     serial_number: str | None = field(default=None)
     """Serial number"""
-
-    firmware_version: str | None = field(default=None)
-    """Firmware version"""
 
     system_mode: SystemMode | None = field(default=None)
     """The system mode (state) of the device"""
@@ -176,6 +176,10 @@ class Device(typing.Generic[AttributesType]):
         """Get device code"""
         return self._attributes.name
 
+    def get_firmware_version(self) -> str | None:
+        """Get firmware version"""
+        return self._attributes.firmware_version
+
     def set_attributes(self, changes: Mapping[str, typing.Any]):
         """Set new value for attributes
 
@@ -238,10 +242,6 @@ class HvacDevice(Device[HvacAttributes]):
     def get_manufacturer(self) -> str | None:
         """Get serial number"""
         return self._attributes.manufacturer
-
-    def get_firmware_version(self) -> str | None:
-        """Get serial number"""
-        return self._attributes.firmware_version
 
     def get_system_mode(self) -> SystemMode | None:
         """Get mode of the device"""
@@ -310,3 +310,11 @@ class Gateway(Device[GatewayAttributes]):
     def get_occupant(self) -> Occupant:
         """Get the occupant of the gateway"""
         return self._attributes.occupant
+
+    def get_ip_addressself(self) -> str | None:
+        """Get the IP address of the gateway"""
+        return self._attributes.ip_address
+
+    def get_mac_address(self) -> str | None:
+        """Get the MAC address of the gateway"""
+        return self._attributes.mac_address

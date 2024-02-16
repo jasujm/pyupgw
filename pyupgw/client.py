@@ -63,7 +63,38 @@ def _parse_hvac_devices(data):
             )
 
 
-_SHADOW_TO_ATTRIBUTES_MAP: list[tuple[str, str, Callable[[typing.Any], typing.Any]]] = [
+ShadowToAttributesMap = list[tuple[str, str, Callable[[typing.Any], typing.Any]]]
+ShadowState = Mapping[str, typing.Any] | None
+AttributesMap = dict[str, typing.Any]
+
+
+def _create_shadow_attributes_parser(
+    key: str, attributes_map: ShadowToAttributesMap
+) -> Callable[[ShadowState], AttributesMap]:
+    def _parser(shadow_state: ShadowState):
+        properties = deep_get(shadow_state, ["state", "reported", key, "properties"])
+        if not properties:
+            return {}
+        ret = {}
+        for attr_key, shadow_key, transform in attributes_map:
+            if (value := properties.get(shadow_key)) is not None:
+                try:
+                    ret[attr_key] = transform(value)
+                except Exception as ex:  # pylint: disable=broad-exception-caught
+                    logger.warning(
+                        "Failed to parse state argument %s=%s",
+                        shadow_key,
+                        repr(value),
+                        exc_info=ex,
+                    )
+        return ret
+
+    return _parser
+
+
+_HVAC_SHADOW_TO_ATTRIBUTES_MAP: list[
+    tuple[str, str, Callable[[typing.Any], typing.Any]]
+] = [
     ("serial_number", "ep1:sPowerMS:RadSerialNum", str),
     ("manufacturer", "ep1:sBasicS:ManufactureName", str),
     ("firmware_version", "ep1:sZDO:FirmwareVersion", str),
@@ -79,27 +110,34 @@ _SHADOW_TO_ATTRIBUTES_MAP: list[tuple[str, str, Callable[[typing.Any], typing.An
     ("running_state", "ep1:sTherS:RunningState", RunningState),
 ]
 
+_GATEWAY_SHADOW_TO_ATTRIBUTES_MAP: list[
+    tuple[str, str, Callable[[typing.Any], typing.Any]]
+] = [
+    ("firmware_version", "ep0:sGateway:GatewaySoftwareVersion", str),
+    ("mac_address", "ep0:sGateway:NetworkLANMAC", str),
+    ("ip_address", "ep0:sGateway:NetworkLANIP", str),
+]
 
-def _parse_shadow_attributes(shadow_state: Mapping[str, typing.Any] | None):
-    properties = deep_get(shadow_state, ["state", "reported", "11", "properties"])
-    if not properties:
-        return {}
-    ret = {}
-    for attr_key, shadow_key, transform in _SHADOW_TO_ATTRIBUTES_MAP:
-        if (value := properties.get(shadow_key)) is not None:
-            try:
-                ret[attr_key] = transform(value)
-            except Exception as ex:  # pylint: disable=broad-exception-caught
-                logger.warning(
-                    "Failed to parse state argument %s=%s",
-                    shadow_key,
-                    repr(value),
-                    exc_info=ex,
-                )
-    return ret
+_ATTRIBUTES_PARSER_MAP = {
+    DeviceType.GATEWAY: _create_shadow_attributes_parser(
+        "000000000001", _GATEWAY_SHADOW_TO_ATTRIBUTES_MAP
+    ),
+    DeviceType.HVAC: _create_shadow_attributes_parser(
+        "11", _HVAC_SHADOW_TO_ATTRIBUTES_MAP
+    ),
+}
 
 
-_ATTRIBUTES_TO_SHADOW_MAP: list[tuple[str, str, Callable[[typing.Any], typing.Any]]] = [
+def _parse_shadow_attributes(
+    shadow_state: ShadowState, device: Device
+) -> AttributesMap:
+    parser = _ATTRIBUTES_PARSER_MAP[device.get_type()]
+    return parser(shadow_state)
+
+
+_HVAC_ATTRIBUTES_TO_SHADOW_MAP: list[
+    tuple[str, str, Callable[[typing.Any], typing.Any]]
+] = [
     (
         "target_temperature",
         "ep1:sTherS:SetHeatingSetpoint_x100",
@@ -111,7 +149,7 @@ _ATTRIBUTES_TO_SHADOW_MAP: list[tuple[str, str, Callable[[typing.Any], typing.An
 
 def _create_shadow_update_attributes(changes: Mapping[str, typing.Any]):
     desired_properties: dict[str, typing.Any] = {}
-    for attr_key, shadow_key, transform in _ATTRIBUTES_TO_SHADOW_MAP:
+    for attr_key, shadow_key, transform in _HVAC_ATTRIBUTES_TO_SHADOW_MAP:
         if (value := changes.get(attr_key)) is not None:
             desired_properties[shadow_key] = transform(value)
     return {"state": {"desired": {"11": {"properties": desired_properties}}}}
@@ -180,6 +218,7 @@ class _MqttClientManager(contextlib.AbstractAsyncContextManager):
         self._clients: dict[str, IotShadowMqtt] = {}
         self._loop = asyncio.get_running_loop()
         self._exit_stack = contextlib.AsyncExitStack()
+        self._create_client_lock = asyncio.Lock()
 
     async def __aexit__(self, exc_type, exc_value, traceback):
         await self._exit_stack.aclose()
@@ -198,11 +237,27 @@ class _MqttClientManager(contextlib.AbstractAsyncContextManager):
 
     async def client_for_gateway(
         self,
-        occupant: Occupant,
         device_code: str,
-        child_device_codes: list[str],
+        child_device_codes: Iterable[str],
+        identity_id: str,
     ) -> IotShadowMqtt:
         """Get shadow client for a given gateway"""
+        if existing_client := self._clients.get(device_code):
+            return existing_client
+        # Double checked locking: _get_or_create_client_for_gateway() starts
+        # by checking for existence of the client in case multiple tasks get
+        # to this branch
+        async with self._create_client_lock:
+            return await self._get_or_create_client_for_gateway(
+                device_code, child_device_codes, identity_id
+            )
+
+    async def _get_or_create_client_for_gateway(
+        self,
+        device_code: str,
+        child_device_codes: Iterable[str],
+        identity_id: str,
+    ):
         if existing_client := self._clients.get(device_code):
             return existing_client
         bound_on_response_state_received = functools.partial(
@@ -211,9 +266,9 @@ class _MqttClientManager(contextlib.AbstractAsyncContextManager):
         client = await self._exit_stack.enter_async_context(
             IotShadowMqtt(
                 aws=self._aws,
-                identity_id=occupant.identity_id,
+                identity_id=identity_id,
                 client_name=device_code,
-                thing_names=child_device_codes,
+                thing_names=[device_code, *child_device_codes],
                 loop=self._loop,
                 on_response_state_received=bound_on_response_state_received,
             )
@@ -300,8 +355,10 @@ class Client(contextlib.AbstractAsyncContextManager):
           ClientError: if the request to get device state fails
         """
         async with asyncio.TaskGroup() as task_group:
-            for gateway, child in self.get_devices():
-                task_group.create_task(self.refresh_device_state(gateway, child))
+            for gateway in self.get_gateways():
+                task_group.create_task(self.refresh_device_state(gateway, gateway))
+                for device in gateway.get_children():
+                    task_group.create_task(self.refresh_device_state(gateway, device))
 
     async def refresh_device_state(
         self,
@@ -332,7 +389,7 @@ class Client(contextlib.AbstractAsyncContextManager):
             response,
             extra={"response": response},
         )
-        changes = _parse_shadow_attributes(response)
+        changes = _parse_shadow_attributes(response, device)
         device.set_attributes(changes)
 
     async def update_device_state(
@@ -378,9 +435,9 @@ class Client(contextlib.AbstractAsyncContextManager):
 
     async def _mqtt_client_for_gateway(self, gateway: Gateway):
         return await self._mqtt_client_manager.client_for_gateway(
-            gateway.get_occupant(),
             gateway.get_device_code(),
-            [child.get_device_code() for child in gateway.get_children()],
+            (child.get_device_code() for child in gateway.get_children()),
+            gateway.get_occupant().identity_id,
         )
 
     def _on_update_device(
@@ -397,10 +454,11 @@ class Client(contextlib.AbstractAsyncContextManager):
         )
         for gateway in self._gateways:
             if gateway.get_device_code() == device_code:
-                for child in gateway.get_children():
-                    if child.get_device_code() == child_device_code:
-                        changes = _parse_shadow_attributes(response)
-                        child.set_attributes(changes)
+                gateway_and_devices: list[Device] = [gateway, *gateway.get_children()]
+                for device in gateway_and_devices:
+                    if device.get_device_code() == child_device_code:
+                        changes = _parse_shadow_attributes(response, device)
+                        device.set_attributes(changes)
 
     async def _refresh_all_for_occupant(self, occupant: Occupant):
         async with asyncio.TaskGroup() as task_group:

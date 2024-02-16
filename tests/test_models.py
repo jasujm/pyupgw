@@ -20,7 +20,7 @@ from pyupgw import Gateway, GatewayAttributes, HvacAttributes, HvacDevice, Syste
         max_temp=st.floats(allow_nan=False),
     )
 )
-def test_device(attributes: HvacAttributes):
+def test_hvac_device(attributes: HvacAttributes):
     device = HvacDevice(
         attributes, unittest.mock.AsyncMock(), unittest.mock.AsyncMock()
     )
@@ -134,6 +134,11 @@ def test_gateway(attributes: GatewayAttributes, children: list[HvacAttributes]):
         attributes, children, unittest.mock.AsyncMock(), unittest.mock.AsyncMock()
     )
     assert gateway.get_attributes() == attributes
+    assert gateway.get_id() == attributes.id
+    assert gateway.get_type() == attributes.type
+    assert gateway.get_device_code() == attributes.device_code
+    assert gateway.get_model() == attributes.model
+    assert gateway.get_name() == attributes.name
     assert gateway.get_occupant() == attributes.occupant
     assert [child.get_attributes() for child in gateway.get_children()] == children
 

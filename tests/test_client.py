@@ -4,7 +4,6 @@
 
 import contextlib
 import unittest.mock
-from concurrent.futures import Future
 
 import pytest
 from attrs import define
@@ -36,12 +35,6 @@ class _MockAws:
     check_token: unittest.mock.Mock
     get_tokens: unittest.mock.Mock
     get_credentials_provider: unittest.mock.Mock
-
-
-def _instant_future(result):
-    future = Future()
-    future.set_result(result)
-    return future
 
 
 def _mock_aws(monkeypatch) -> _MockAws:

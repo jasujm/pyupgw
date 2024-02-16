@@ -25,9 +25,6 @@ from .models import (
     SystemMode,
 )
 
-if typing.TYPE_CHECKING:
-    import concurrent.futures
-
 _DISCONNECT_UNAVAILABLE_TIMEOUT = 60
 _DISCONNECT_UNAVAILABLE_PAYLOAD = {"state": {"reported": {"connected": "false"}}}
 logger = logging.getLogger(__name__)
@@ -500,15 +497,6 @@ class Client(contextlib.AbstractAsyncContextManager):
         if device := self._device_map.get((device_code, child_device_code)):
             changes = _parse_shadow_attributes(response, device)
             device.set_attributes(changes)
-
-    async def _refresh_all_for_occupant(self, occupant: Occupant):
-        async with asyncio.TaskGroup() as task_group:
-            for gateway in self.get_gateways():
-                if gateway.get_occupant() == occupant:
-                    for child in gateway.get_children():
-                        task_group.create_task(
-                            self.refresh_device_state(gateway, child)
-                        )
 
 
 async def create_api(username: str, password: str) -> AwsApi:

@@ -31,7 +31,7 @@ The following sample program illustrates how to use the client
 .. code-block:: python
 
    import asyncio
-   from pyupgw import create_client, Client, Device
+   from pyupgw import create_client, Client, Device, DeviceType
 
    def report_changes(device: Device, changes: dict):
        print(f"{device.get_name()} has new changes:")
@@ -51,11 +51,12 @@ The following sample program illustrates how to use the client
 
             print("Devices:")
             for gateway, device in client.get_devices():
-                print(
-                    f"- {device.get_name()},",
-                    f"target temperature: {device.get_target_temperature()},",
-                    f"current temperature: {device.get_current_temperature()}",
-                )
+                if device.get_type() == DeviceType.HVAC:
+                    print(
+                        f"- {device.get_name()},",
+                        f"target temperature: {device.get_target_temperature()},",
+                        f"current temperature: {device.get_current_temperature()}",
+                    )
 
             device = client.get_gateways()[0].get_children()[0]
 

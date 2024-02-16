@@ -72,7 +72,10 @@ def _create_shadow_attributes_parser(
     def _parser(shadow_state: ShadowState):
         ret = {}
         reported_state = deep_get(shadow_state, ["state", "reported"])
-        if (connected_str := reported_state.get("connected")) is not None:
+        if (
+            reported_state
+            and (connected_str := reported_state.get("connected")) is not None
+        ):
             ret["available"] = connected_str == "true"
         properties = deep_get(reported_state, [key, "properties"])
         if not properties:

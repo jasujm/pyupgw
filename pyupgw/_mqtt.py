@@ -58,12 +58,16 @@ class IotShadowMqtt(
         thing_names: list[str],
         loop: asyncio.AbstractEventLoop,
         on_response_state_received: Callable[[str, dict | None], None],
+        on_disconnected: Callable[[list[str]], None],
+        on_connected: Callable[[], None],
     ):
         self._aws = aws
         self._identity_id = identity_id
         self._client_name = client_name
         self._thing_names = thing_names
         self._on_response_state_received = on_response_state_received
+        self._on_disconnected = on_disconnected
+        self._on_connected = on_connected
         self._loop = loop
         self._client: Client | None = None
         self._publish_lock = threading.Lock()
@@ -151,6 +155,7 @@ class IotShadowMqtt(
             for thing_name in self._thing_names:
                 self._loop.call_soon_threadsafe(self._async_get, thing_name)
         self._loop.call_soon_threadsafe(self._async_initialized_event.set)
+        self._loop.call_soon_threadsafe(self._on_connected)
 
     def _on_message(self, _client, _userdata, message):
         logger.debug("Received message from %s: %r", message.topic, message.payload)
@@ -174,6 +179,7 @@ class IotShadowMqtt(
             logger.warning("MQTT client unexpectedly disconnected with code %r", rc)
         else:
             logger.info("MQTT client disconnected")
+        self._loop.call_soon_threadsafe(self._on_disconnected, self._thing_names)
 
     def _accepted_callback(self, thing_name: str, payload: dict | None):
         if publish_future := self._get_pending_publish_future_for_response(payload):

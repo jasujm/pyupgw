@@ -28,6 +28,8 @@ from .models import (
 if typing.TYPE_CHECKING:
     import concurrent.futures
 
+_DISCONNECT_UNAVAILABLE_TIMEOUT = 60
+_DISCONNECT_UNAVAILABLE_PAYLOAD = {"state": {"reported": {"connected": "false"}}}
 logger = logging.getLogger(__name__)
 
 
@@ -71,10 +73,13 @@ def _create_shadow_attributes_parser(
     key: str, attributes_map: ShadowToAttributesMap
 ) -> Callable[[ShadowState], AttributesMap]:
     def _parser(shadow_state: ShadowState):
-        properties = deep_get(shadow_state, ["state", "reported", key, "properties"])
-        if not properties:
-            return {}
         ret = {}
+        reported_state = deep_get(shadow_state, ["state", "reported"])
+        if (connected_str := reported_state.get("connected")) is not None:
+            ret["available"] = connected_str == "true"
+        properties = deep_get(reported_state, [key, "properties"])
+        if not properties:
+            return ret
         for attr_key, shadow_key, transform in attributes_map:
             if (value := properties.get(shadow_key)) is not None:
                 try:
@@ -218,9 +223,12 @@ class _MqttClientManager(contextlib.AbstractAsyncContextManager):
         self._loop = asyncio.get_running_loop()
         self._exit_stack = contextlib.AsyncExitStack()
         self._create_client_lock = asyncio.Lock()
+        self._pending_report_unavailable_tasks: dict[str, asyncio.Task] = {}
 
     async def __aexit__(self, exc_type, exc_value, traceback):
         await self._exit_stack.aclose()
+        for task in self._pending_report_unavailable_tasks.values():
+            task.cancel()
 
     def register_callback(self, callback: Callable[[str, str, dict | None], None]):
         """Register callback that will be invoked when device state is updated
@@ -262,6 +270,8 @@ class _MqttClientManager(contextlib.AbstractAsyncContextManager):
         bound_on_response_state_received = functools.partial(
             self._on_response_state_received, device_code
         )
+        bound_on_connected = functools.partial(self._on_connected, device_code)
+        bound_on_disconnected = functools.partial(self._on_disconnected, device_code)
         client = await self._exit_stack.enter_async_context(
             IotShadowMqtt(
                 aws=self._aws,
@@ -270,6 +280,8 @@ class _MqttClientManager(contextlib.AbstractAsyncContextManager):
                 thing_names=[device_code, *child_device_codes],
                 loop=self._loop,
                 on_response_state_received=bound_on_response_state_received,
+                on_connected=bound_on_connected,
+                on_disconnected=bound_on_disconnected,
             )
         )
         self._clients[device_code] = client
@@ -280,6 +292,30 @@ class _MqttClientManager(contextlib.AbstractAsyncContextManager):
     ):
         for callback in self._on_update_callbacks:
             callback(device_code, child_device_code, response)
+
+    def _on_connected(self, device_code: str):
+        if task := self._pending_report_unavailable_tasks.pop(device_code, None):
+            task.cancel()
+
+    def _on_disconnected(self, device_code: str, child_device_codes: str):
+        if device_code not in self._pending_report_unavailable_tasks:
+            loop = asyncio.get_running_loop()
+
+            async def _report_unavailable():
+                await asyncio.sleep(_DISCONNECT_UNAVAILABLE_TIMEOUT)
+                for child_device_code in child_device_codes:
+                    loop.call_soon(
+                        self._on_response_state_received,
+                        device_code,
+                        child_device_code,
+                        _DISCONNECT_UNAVAILABLE_PAYLOAD,
+                    )
+
+            task = loop.create_task(_report_unavailable())
+            task.add_done_callback(
+                lambda _: self._pending_report_unavailable_tasks.pop(device_code, None)
+            )
+            self._pending_report_unavailable_tasks[device_code] = task
 
 
 class Client(contextlib.AbstractAsyncContextManager):

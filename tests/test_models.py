@@ -30,6 +30,7 @@ def test_hvac_device(attributes: HvacAttributes):
     assert device.get_device_code() == attributes.device_code
     assert device.get_model() == attributes.model
     assert device.get_name() == attributes.name
+    assert device.is_available() == attributes.available
     assert device.get_serial_number() == attributes.serial_number
     assert device.get_manufacturer() == attributes.manufacturer
     assert device.get_firmware_version() == attributes.firmware_version
@@ -139,6 +140,7 @@ def test_gateway(attributes: GatewayAttributes, children: list[HvacAttributes]):
     assert gateway.get_device_code() == attributes.device_code
     assert gateway.get_model() == attributes.model
     assert gateway.get_name() == attributes.name
+    assert gateway.is_available() == attributes.available
     assert gateway.get_occupant() == attributes.occupant
     assert [child.get_attributes() for child in gateway.get_children()] == children
 

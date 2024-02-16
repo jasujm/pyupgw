@@ -87,6 +87,7 @@ class Application(contextlib.AbstractAsyncContextManager):
         table.add_column("Action")
         table.add_column("Target temperature")
         table.add_column("Current temperature")
+        table.add_column("Available")
 
         for current, (gateway, device) in enumerate(self._devices_with_gateways):
             table.add_row(
@@ -104,6 +105,7 @@ class Application(contextlib.AbstractAsyncContextManager):
                 ),
                 self._temperature_renderable(current, device),
                 str(device.get_current_temperature()),
+                ":green_circle:" if device.is_available() else ":x:",
             )
 
         return Group(table, HELP_PANEL)

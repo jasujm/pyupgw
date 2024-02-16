@@ -57,6 +57,9 @@ class DeviceAttributes:
     firmware_version: str | None = field(default=None)
     """Firmware version"""
 
+    available: bool = field(default=False)
+    """Connection to the device is established"""
+
 
 @define
 class Occupant:
@@ -179,6 +182,14 @@ class Device(typing.Generic[AttributesType]):
     def get_firmware_version(self) -> str | None:
         """Get firmware version"""
         return self._attributes.firmware_version
+
+    def is_available(self) -> bool:
+        """Return ``True`` if the device is available, ``False`` otherwise
+
+        A device is available if the cloud connection is established, and the
+        upstream reports that the device is available.
+        """
+        return self._attributes.available
 
     def set_attributes(self, changes: Mapping[str, typing.Any]):
         """Set new value for attributes

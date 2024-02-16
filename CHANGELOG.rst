@@ -4,6 +4,7 @@ Unreleased
 Added
  * Add ``firmware_version``, ``mac_address`` and ``ip_address`` fields to the
    gateway model
+ * Device availability information
 
 Changed
  * Make model attributes keyword only

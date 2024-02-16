@@ -7,6 +7,7 @@ Added
 
 Changed
  * Make model attributes keyword only
+ * ``Client.get_devices()`` now also includes gateways
 
 Fixed
  * Do not initialize multiple MQTT connections for a gateway

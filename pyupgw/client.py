@@ -20,7 +20,6 @@ from .models import (
     Gateway,
     GatewayAttributes,
     HvacAttributes,
-    HvacDevice,
     Occupant,
     RunningState,
     SystemMode,
@@ -311,6 +310,7 @@ class Client(contextlib.AbstractAsyncContextManager):
         self._exit_stack.callback(
             self._mqtt_client_manager.remove_callback, self._on_update_device
         )
+        self._device_map: dict[tuple[str, str], Device] = {}
 
     async def aclose(self):
         """Release all resources acquired by the client
@@ -334,14 +334,25 @@ class Client(contextlib.AbstractAsyncContextManager):
             self._gateways = await _construct_client_data(id_token, access_token, self)
         except Exception as ex:  # pylint: disable=broad-exception-caught
             raise ClientError("Failed to populate devices") from ex
+        self._device_map = {
+            (gateway.get_device_code(), device.get_device_code()): device
+            for (gateway, device) in self.get_devices()
+        }
 
     def get_gateways(self) -> list[Gateway]:
         """Get the managed gateways"""
         return self._gateways
 
-    def get_devices(self) -> Iterable[tuple[Gateway, HvacDevice]]:
-        """Get pairs of gateways and managed devices"""
+    def get_devices(self) -> Iterable[tuple[Gateway, Device]]:
+        """Iterate over devices
+
+        Returns:
+          An iterable of tuples ``(gateway, device)`` where ``gateway`` is the
+          gateway ``device`` is connected to.  Gateways are also returned as
+          ``(gateway, gateway)``.
+        """
         for gateway in self._gateways:
+            yield gateway, gateway
             for child in gateway.get_children():
                 yield gateway, child
 
@@ -355,10 +366,8 @@ class Client(contextlib.AbstractAsyncContextManager):
           ClientError: if the request to get device state fails
         """
         async with asyncio.TaskGroup() as task_group:
-            for gateway in self.get_gateways():
-                task_group.create_task(self.refresh_device_state(gateway, gateway))
-                for device in gateway.get_children():
-                    task_group.create_task(self.refresh_device_state(gateway, device))
+            for gateway, device in self.get_devices():
+                task_group.create_task(self.refresh_device_state(gateway, device))
 
     async def refresh_device_state(
         self,
@@ -452,13 +461,9 @@ class Client(contextlib.AbstractAsyncContextManager):
             response,
             extra={"response": response},
         )
-        for gateway in self._gateways:
-            if gateway.get_device_code() == device_code:
-                gateway_and_devices: list[Device] = [gateway, *gateway.get_children()]
-                for device in gateway_and_devices:
-                    if device.get_device_code() == child_device_code:
-                        changes = _parse_shadow_attributes(response, device)
-                        device.set_attributes(changes)
+        if device := self._device_map.get((device_code, child_device_code)):
+            changes = _parse_shadow_attributes(response, device)
+            device.set_attributes(changes)
 
     async def _refresh_all_for_occupant(self, occupant: Occupant):
         async with asyncio.TaskGroup() as task_group:

@@ -15,7 +15,7 @@ from rich.live import Live
 from rich.panel import Panel
 from rich.table import Table
 
-from pyupgw import Client, Device, HvacDevice, SystemMode, create_client
+from pyupgw import Client, Device, Gateway, HvacDevice, SystemMode, create_client
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +42,7 @@ class Application(contextlib.AbstractAsyncContextManager):
             self._get_change_task,
             self._exit_task,
         ]
-        self._devices: list[HvacDevice] = []
+        self._devices_with_gateways: list[tuple[Gateway, HvacDevice]] = []
         self._pending_temperature: float | None = None
 
     def _enqueue_change(self, device: Device, changes: typing.Any):
@@ -50,9 +50,10 @@ class Application(contextlib.AbstractAsyncContextManager):
 
     async def __aenter__(self):
         await self._client.refresh_all_devices()
-        for _, device in self._client.get_devices():
+        for gateway, device in self._client.get_devices():
             device.subscribe(self._enqueue_change)
-        self._devices = list(device for _, device in self._client.get_devices())
+            if device is not gateway:
+                self._devices_with_gateways.append((gateway, device))
         loop = asyncio.get_running_loop()
         loop.add_signal_handler(signal.SIGINT, self._exit_event.set)
         loop.add_signal_handler(signal.SIGTERM, self._exit_event.set)
@@ -87,7 +88,7 @@ class Application(contextlib.AbstractAsyncContextManager):
         table.add_column("Target temperature")
         table.add_column("Current temperature")
 
-        for current, (gateway, device) in enumerate(self._client.get_devices()):
+        for current, (gateway, device) in enumerate(self._devices_with_gateways):
             table.add_row(
                 f"{':arrow_forward:' if self._device_index == current else ' '} {device.get_name()}",
                 gateway.get_name(),
@@ -126,7 +127,7 @@ class Application(contextlib.AbstractAsyncContextManager):
         return asyncio.create_task(self._exit_event.wait())
 
     def _current_device(self):
-        return self._devices[self._device_index]
+        return self._devices_with_gateways[self._device_index][1]
 
     def _handle_inkey_task(self):
         assert self._inkey_task.done()
@@ -136,15 +137,17 @@ class Application(contextlib.AbstractAsyncContextManager):
             self._device_index = max(self._device_index - 1, 0)
         elif key.code == curses.KEY_DOWN:
             self._pending_temperature = None
-            self._device_index = min(self._device_index + 1, len(self._devices) - 1)
-        elif key.upper() == "O" and self._devices:
+            self._device_index = min(
+                self._device_index + 1, len(self._devices_with_gateways) - 1
+            )
+        elif key.upper() == "O" and self._devices_with_gateways:
             self._pending_temperature = None
             self._tasks.append(
                 asyncio.create_task(
                     self._current_device().update_system_mode(SystemMode.OFF),
                 )
             )
-        elif key.upper() == "H" and self._devices:
+        elif key.upper() == "H" and self._devices_with_gateways:
             self._pending_temperature = None
             self._tasks.append(
                 asyncio.create_task(

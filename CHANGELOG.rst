@@ -1,5 +1,8 @@
-Unreleased
-----------
+Version 0.11
+------------
+
+Date
+  2024-02-17
 
 Added
  * Add ``firmware_version``, ``mac_address`` and ``ip_address`` fields to the

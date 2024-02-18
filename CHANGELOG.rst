@@ -1,3 +1,13 @@
+Version 0.11.1
+--------------
+
+Date
+  2024-02-18
+
+Fixed
+ * Subscribe to AWS IoT shadow topics one device at a time to avoid server
+   disconnecting
+
 Version 0.11
 ------------
 

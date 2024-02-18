@@ -70,10 +70,12 @@ class IotShadowMqtt(
         self._on_connected = on_connected
         self._loop = loop
         self._client: Client | None = None
+        self._thread = threading.Thread(target=self._mqtt_loop)
         self._publish_lock = threading.Lock()
+        self._subscription_lock = threading.Lock()
         self._async_initialized_event = asyncio.Event()
         self._async_quit_done_event = asyncio.Event()
-        self._thread = threading.Thread(target=self._mqtt_loop)
+        self._pending_subscriptions = 0
         self._pending_publish_futures: dict[str, asyncio.Future] = {}
         self._pending_tasks: set[asyncio.Task] = set()
 
@@ -135,19 +137,29 @@ class IotShadowMqtt(
 
     def _on_connect(self, client, _userdata, _flags, _rc):
         logger.info("MQTT client connected")
-        client.subscribe(
-            [
-                (_aws_shadow_topic(thing_name, command, result), 0)
-                for (thing_name, command, result) in itertools.product(
-                    self._thing_names,
-                    [AWS_TOPIC_GET, AWS_TOPIC_UPDATE],
-                    [AWS_TOPIC_ACCEPTED, AWS_TOPIC_REJECTED],
+        with self._subscription_lock:
+            self._pending_subscriptions = len(self._thing_names)
+            logger.debug("Subscribing for %d devices", self._pending_subscriptions)
+            for thing_name in self._thing_names:
+                client.subscribe(
+                    [
+                        (_aws_shadow_topic(thing_name, command, result), 0)
+                        for (command, result) in itertools.product(
+                            [AWS_TOPIC_GET, AWS_TOPIC_UPDATE],
+                            [AWS_TOPIC_ACCEPTED, AWS_TOPIC_REJECTED],
+                        )
+                    ]
                 )
-            ]
-        )
 
     def _on_subscribe(self, client, _userdata, _mid, _granted_qos):
-        logger.info("MQTT client subscribed to topics")
+        with self._subscription_lock:
+            self._pending_subscriptions -= 1
+            logger.debug(
+                "MQTT client subscription completed, pending %d subscriptions",
+                self._pending_subscriptions,
+            )
+            if self._pending_subscriptions > 0:
+                return
         with self._publish_lock:
             self._client = client
         # We are here after reconnecting. Request new state from devices.

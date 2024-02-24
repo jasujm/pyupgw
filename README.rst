@@ -96,8 +96,9 @@ include the ``cli`` extras:
 Goals
 -----
 
-The main reason for this project is to (eventually) develop `Home Assistant
-<https://www.home-assistant.io/>`_ integration for the Unisenza Plus.
+The main reason for this project was to develop a client library for a `Home
+Assistant integration for Unisenza Plus
+<https://github.com/jasujm/home-assistant-unisenza-plus>`_.
 
 The client library is intended to give a robust and simplified interface to the
 most important functionality of the smart thermostats. By hiding complexity it

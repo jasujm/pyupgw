@@ -2,6 +2,7 @@
 
 import asyncio
 import contextlib
+import functools
 import itertools
 import json
 import logging
@@ -235,4 +236,9 @@ class IotShadowMqtt(
     def _async_get(self, thing_name: str):
         task = self._loop.create_task(self.get(thing_name))
         self._pending_tasks.add(task)
-        task.add_done_callback(self._pending_tasks.discard)
+        task.add_done_callback(functools.partial(self._async_get_done, thing_name))
+
+    def _async_get_done(self, thing_name: str, task: asyncio.Task):
+        if exc := task.exception():
+            logger.warning("Unable to get state for %s", thing_name, exc_info=exc)
+        self._pending_tasks.discard(task)

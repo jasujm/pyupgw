@@ -1,3 +1,9 @@
+Unreleased
+----------
+
+Fixed
+ * Retrieve and log error for failing to refresh device state after reconnect
+
 Version 0.11.1
 --------------
 

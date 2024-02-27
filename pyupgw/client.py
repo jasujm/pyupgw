@@ -84,7 +84,7 @@ def _create_shadow_attributes_parser(
             if (value := properties.get(shadow_key)) is not None:
                 try:
                     ret[attr_key] = transform(value)
-                except Exception as ex:  # pylint: disable=broad-exception-caught
+                except Exception as ex:
                     logger.warning(
                         "Failed to parse state argument %s=%s",
                         shadow_key,
@@ -368,7 +368,7 @@ class Client(contextlib.AbstractAsyncContextManager):
         try:
             id_token, access_token = await asyncio.to_thread(self._aws.get_tokens)
             self._gateways = await _construct_client_data(id_token, access_token, self)
-        except Exception as ex:  # pylint: disable=broad-exception-caught
+        except Exception as ex:
             raise ClientError("Failed to populate devices") from ex
         self._device_map = {
             (gateway.get_device_code(), device.get_device_code()): device

@@ -24,7 +24,6 @@ HELP_PANEL = Panel(
 )
 
 
-# pylint: disable=too-many-instance-attributes
 class Application(contextlib.AbstractAsyncContextManager):
     """Application state"""
 

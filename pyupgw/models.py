@@ -1,7 +1,5 @@
 """Models and data structures used by the library"""
 
-# pylint: disable=too-many-instance-attributes
-
 import enum
 import functools
 import logging
@@ -122,9 +120,7 @@ class HvacAttributes(DeviceAttributes):
 DeviceChangeSubscriber = Callable[["Device", Mapping[str, typing.Any]], None]
 
 
-AttributesType = typing.TypeVar(  # pylint: disable=invalid-name
-    "AttributesType", bound=DeviceAttributes
-)
+AttributesType = typing.TypeVar("AttributesType", bound=DeviceAttributes)
 """Type variable"""
 
 
@@ -205,7 +201,7 @@ class Device(typing.Generic[AttributesType]):
             for subscriber in self._subscribers:
                 try:
                     subscriber(self, changes)
-                except Exception:  # pylint: disable=broad-exception-caught
+                except Exception:
                     logger.exception(
                         "Failed to invoke subscriber callback for device %r",
                         self.get_attributes(),

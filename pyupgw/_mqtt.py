@@ -38,9 +38,7 @@ def _aws_shadow_topic(thing_name: str, command: str, result: str | None = None):
     return f"$aws/things/{thing_name}/shadow/{command}{suffix}"
 
 
-class IotShadowMqtt(
-    contextlib.AbstractAsyncContextManager
-):  # pylint: disable=too-many-instance-attributes
+class IotShadowMqtt(contextlib.AbstractAsyncContextManager):
     """MQTT client that interacts with the AWS IoT shadow service
 
     Spawns a Paho MQTT based network loop that will:
@@ -50,7 +48,7 @@ class IotShadowMqtt(
     - Give asyncio interface to interacting with the network thread
     """
 
-    def __init__(  # pylint: disable=too-many-arguments
+    def __init__(
         self,
         *,
         aws: AwsApi,

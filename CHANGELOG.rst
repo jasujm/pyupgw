@@ -1,6 +1,9 @@
 Unreleased
 ----------
 
+Changed
+ * Replace existing linters with ``ruff``
+
 Fixed
  * Retrieve and log error for failing to refresh device state after reconnect
 

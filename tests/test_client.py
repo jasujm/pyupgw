@@ -1,7 +1,5 @@
 """Tests for the UPGW client"""
 
-# pylint: disable=redefined-outer-name
-
 import contextlib
 import unittest.mock
 

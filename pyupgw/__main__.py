@@ -5,11 +5,11 @@ def main():
     """Run ``pyupgw`` as script"""
 
     try:
-        from .cli import cli  # pylint: disable=import-outside-toplevel
+        from .cli import cli
     except ImportError:
         print("Unable to load CLI. Perhaps missing [cli] extras?")
     else:
-        cli()  # pylint: disable=no-value-for-parameter
+        cli()
 
 
 if __name__ == "__main__":

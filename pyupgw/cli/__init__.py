@@ -1,6 +1,6 @@
 """Command line interface"""
 
-# pylint: disable=wrong-import-position,wrong-import-order,redefined-builtin
+# ruff: noqa: E402
 
 from dotenv import load_dotenv
 
@@ -10,15 +10,10 @@ import asyncio
 import functools
 import os
 import sys
-import typing
-from collections.abc import Iterable
 
 import rich_click as click
-from rich.console import Console
-from rich.live import Live
-from rich.table import Table
 
-from pyupgw import Client, Device, Gateway, HvacDevice, SystemMode, create_client
+from pyupgw import Client, SystemMode, create_client
 
 from ._logging import setup_logging
 from .commands import get as get_impl

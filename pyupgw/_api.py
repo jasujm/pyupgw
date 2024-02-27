@@ -5,8 +5,6 @@ This module is meant for developing the high level client, and should rarely be
 used directly.  Breaking changes may be introduced between minor versions.
 """
 
-# pylint: disable=too-many-arguments
-
 import contextlib
 import os
 import threading

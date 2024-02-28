@@ -318,7 +318,7 @@ class Gateway(Device[GatewayAttributes]):
         """Get the occupant of the gateway"""
         return self._attributes.occupant
 
-    def get_ip_addressself(self) -> str | None:
+    def get_ip_address(self) -> str | None:
         """Get the IP address of the gateway"""
         return self._attributes.ip_address
 

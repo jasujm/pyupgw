@@ -6,6 +6,7 @@ Changed
 
 Fixed
  * Retrieve and log error for failing to refresh device state after reconnect
+ * Correct typo in function name `Gateway.get_ip_address()`
 
 Version 0.11.1
 --------------

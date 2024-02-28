@@ -142,6 +142,8 @@ def test_gateway(attributes: GatewayAttributes, children: list[HvacAttributes]):
     assert gateway.get_name() == attributes.name
     assert gateway.is_available() == attributes.available
     assert gateway.get_occupant() == attributes.occupant
+    assert gateway.get_ip_address() == attributes.ip_address
+    assert gateway.get_mac_address() == attributes.mac_address
     assert [child.get_attributes() for child in gateway.get_children()] == children
 
 

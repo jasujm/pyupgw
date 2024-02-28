@@ -213,6 +213,10 @@ def _create_service_api():
     return ServiceApi()
 
 
+def _create_iot_shadow_client(**kwargs) -> IotShadowMqtt:
+    return IotShadowMqtt(**kwargs)
+
+
 class _MqttClientManager(contextlib.AbstractAsyncContextManager):
     """Manage shadow clients for devices"""
 
@@ -273,7 +277,7 @@ class _MqttClientManager(contextlib.AbstractAsyncContextManager):
         bound_on_connected = functools.partial(self._on_connected, device_code)
         bound_on_disconnected = functools.partial(self._on_disconnected, device_code)
         client = await self._exit_stack.enter_async_context(
-            IotShadowMqtt(
+            _create_iot_shadow_client(
                 aws=self._aws,
                 identity_id=identity_id,
                 client_name=device_code,

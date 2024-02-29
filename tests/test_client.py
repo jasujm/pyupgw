@@ -314,3 +314,65 @@ async def test_refresh_device_states_fail(
             device = gateway.get_children()[0]
             with pytest.raises(ClientError):
                 await client.refresh_device_state(gateway, device)
+
+
+@pytest.mark.asyncio
+@given(
+    gateway_attributes=...,
+    device_attributes=...,
+    changes=st.fixed_dictionaries(
+        {},
+        optional={
+            "target_temperature": st.floats(0.0, 30.0),
+            "system_mode": st.sampled_from(SystemMode),
+        },
+    ),
+)
+async def test_update_device_state(
+    gateway_attributes: GatewayAttributes,
+    device_attributes: HvacAttributes,
+    changes: dict,
+    client_setup,
+):
+    with client_setup([(gateway_attributes, [device_attributes])]) as (_, _, mqtt):
+        async with create_client(USERNAME, PASSWORD) as client:
+            gateway = client.get_gateways()[0]
+            device = gateway.get_children()[0]
+            await client.update_device_state(gateway, device, changes)
+            expected_properties = {}
+            if (target_temperature := changes.get("target_temperature")) is not None:
+                expected_properties["ep1:sTherS:SetHeatingSetpoint_x100"] = round(
+                    100 * target_temperature
+                )
+            if (system_mode := changes.get("system_mode")) is not None:
+                expected_properties["ep1:sTherS:SetSystemMode"] = system_mode.value
+            mqtt.update.assert_awaited_with(
+                device_attributes.device_code,
+                {"state": {"desired": {"11": {"properties": expected_properties}}}},
+            )
+
+
+@pytest.mark.asyncio
+@given(
+    gateway_attributes=...,
+    device_attributes=...,
+    changes=st.fixed_dictionaries(
+        {
+            "target_temperature": st.floats(0.0, 30.0),
+            "system_mode": st.sampled_from(SystemMode),
+        }
+    ),
+)
+async def test_update_device_state_fail(
+    gateway_attributes: GatewayAttributes,
+    device_attributes: HvacAttributes,
+    changes: dict,
+    client_setup,
+):
+    with client_setup([(gateway_attributes, [device_attributes])]) as (_, _, mqtt):
+        mqtt.update.side_effect = Exception("It fails :(")
+        async with create_client(USERNAME, PASSWORD) as client:
+            gateway = client.get_gateways()[0]
+            device = gateway.get_children()[0]
+            with pytest.raises(ClientError):
+                await client.update_device_state(gateway, device, changes)

@@ -1,11 +1,12 @@
 """Tests for the UPGW client"""
 
+import asyncio
 import contextlib
 import unittest.mock
 
 import pytest
 from attrs import define
-from hypothesis import given
+from hypothesis import assume, given
 from hypothesis import strategies as st
 
 import pyupgw._api
@@ -117,6 +118,7 @@ def _mock_service_api(monkeypatch, gateways: list[GatewayData]) -> _MockServiceA
 class _MockIotShadowMqtt:
     get: unittest.mock.AsyncMock
     update: unittest.mock.AsyncMock
+    kwargs: dict
 
     async def __aenter__(self):
         return self
@@ -129,8 +131,14 @@ def _mock_shadow_iot(monkeypatch):
     ret = _MockIotShadowMqtt(
         get=unittest.mock.AsyncMock(return_value={}),
         update=unittest.mock.AsyncMock(),
+        kwargs={},
     )
-    class_mock = unittest.mock.MagicMock(return_value=ret)
+
+    def _create_client_mock(**kwargs):
+        ret.kwargs = kwargs
+        return ret
+
+    class_mock = unittest.mock.MagicMock(side_effect=_create_client_mock)
     monkeypatch.setattr(pyupgw.client, "_create_iot_shadow_client", class_mock)
     return ret
 
@@ -376,3 +384,59 @@ async def test_update_device_state_fail(
             device = gateway.get_children()[0]
             with pytest.raises(ClientError):
                 await client.update_device_state(gateway, device, changes)
+
+
+@pytest.mark.asyncio
+@given(
+    gateway_attributes=...,
+    device_attributes=...,
+    target_temperature=st.floats(0.0, 30.0),
+)
+async def test_receive_response_state(
+    gateway_attributes: GatewayAttributes,
+    device_attributes: HvacAttributes,
+    target_temperature: float,
+    client_setup,
+):
+    target_temperature = round(target_temperature, 2)
+    assume(gateway_attributes.device_code != device_attributes.device_code)
+    with client_setup([(gateway_attributes, [device_attributes])]) as (_, _, mqtt):
+        async with create_client(USERNAME, PASSWORD) as client:
+            gateway = client.get_gateways()[0]
+            device = gateway.get_children()[0]
+
+            update_event = asyncio.Event()
+
+            def _on_update(_device, _changes):
+                update_event.set()
+                assert _device is device
+                assert _changes["target_temperature"] == target_temperature
+
+            device.subscribe(_on_update)
+
+            await client.refresh_device_state(gateway, device)
+            on_response_state_received = mqtt.kwargs["on_response_state_received"]
+            on_response_state_received(
+                device_attributes.device_code,
+                {
+                    "state": {
+                        "reported": {
+                            "connected": "true",
+                            "11": {
+                                "properties": {
+                                    "ep1:sTherS:HeatingSetpoint_x100": str(
+                                        round(100 * target_temperature)
+                                    ),
+                                }
+                            },
+                        }
+                    }
+                },
+            )
+
+            async with asyncio.timeout(0.1):
+                await update_event.wait()
+
+            assert device.get_target_temperature() == target_temperature
+
+            device.unsubscribe(_on_update)

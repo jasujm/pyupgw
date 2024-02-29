@@ -307,7 +307,6 @@ async def test_refresh_device_states_fail(
     device_attributes: HvacAttributes,
     client_setup,
 ):
-    print(gateway_attributes, device_attributes)
     with client_setup([(gateway_attributes, [device_attributes])]) as (_, _, mqtt):
         mqtt.get.side_effect = Exception("It fails :(")
         async with create_client(USERNAME, PASSWORD) as client:

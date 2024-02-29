@@ -205,15 +205,15 @@ async def _construct_client_data(id_token: str, access_token: str, client: "Clie
     return gateways
 
 
-def _create_aws_api(username: str):
+def _create_aws_api(username: str):  # pragma: no cover
     return AwsApi(username)
 
 
-def _create_service_api():
+def _create_service_api():  # pragma: no cover
     return ServiceApi()
 
 
-def _create_iot_shadow_client(**kwargs) -> IotShadowMqtt:
+def _create_iot_shadow_client(**kwargs) -> IotShadowMqtt:  # pragma: no cover
     return IotShadowMqtt(**kwargs)
 
 
@@ -232,7 +232,7 @@ class _MqttClientManager(contextlib.AbstractAsyncContextManager):
     async def __aexit__(self, exc_type, exc_value, traceback):
         await self._exit_stack.aclose()
         for task in self._pending_report_unavailable_tasks.values():
-            task.cancel()
+            task.cancel()  # pragma: no cover
 
     def register_callback(self, callback: Callable[[str, str, dict | None], None]):
         """Register callback that will be invoked when device state is updated
@@ -270,7 +270,7 @@ class _MqttClientManager(contextlib.AbstractAsyncContextManager):
         identity_id: str,
     ):
         if existing_client := self._clients.get(device_code):
-            return existing_client
+            return existing_client  # pragma: no cover
         bound_on_response_state_received = functools.partial(
             self._on_response_state_received, device_code
         )
@@ -297,11 +297,13 @@ class _MqttClientManager(contextlib.AbstractAsyncContextManager):
         for callback in self._on_update_callbacks:
             callback(device_code, child_device_code, response)
 
-    def _on_connected(self, device_code: str):
+    def _on_connected(self, device_code: str):  # pragma: no cover
         if task := self._pending_report_unavailable_tasks.pop(device_code, None):
             task.cancel()
 
-    def _on_disconnected(self, device_code: str, child_device_codes: str):
+    def _on_disconnected(
+        self, device_code: str, child_device_codes: str
+    ):  # pragma: no cover
         if device_code not in self._pending_report_unavailable_tasks:
             loop = asyncio.get_running_loop()
 

@@ -2,11 +2,12 @@
 
 import asyncio
 import contextlib
+import logging
 import unittest.mock
 
 import pytest
 from attrs import define
-from hypothesis import assume, given
+from hypothesis import assume, given, settings, HealthCheck
 from hypothesis import strategies as st
 
 import pyupgw._api
@@ -85,15 +86,17 @@ def _mock_service_api(monkeypatch, gateways: list[GatewayData]) -> _MockServiceA
                 **slider_data,
                 "items": [
                     slider_data["gateway"],
-                    *(
-                        {
-                            "id": str(item.id),
-                            "device_code": item.device_code,
-                            "model": item.model,
-                            "name": item.name,
-                        }
-                        for item in gateways[i][1]
-                    ),
+                    {
+                        "items": [
+                            {
+                                "id": str(item.id),
+                                "device_code": item.device_code,
+                                "model": item.model,
+                                "name": item.name,
+                            }
+                            for item in gateways[i][1]
+                        ]
+                    },
                 ],
             }
         }
@@ -175,6 +178,15 @@ async def test_authenticate_with_failure(client_setup):
     with client_setup([]) as (aws, _, _):
         aws.authenticate.side_effect = NotAuthorized("wrong password")
         with pytest.raises(AuthenticationError):
+            await create_api(USERNAME, PASSWORD)
+    aws.authenticate.assert_called_with(PASSWORD)
+
+
+@pytest.mark.asyncio
+async def test_authenticate_with_misc_failure(client_setup):
+    with client_setup([]) as (aws, _, _):
+        aws.authenticate.side_effect = Exception("it fails :(")
+        with pytest.raises(Exception):
             await create_api(USERNAME, PASSWORD)
     aws.authenticate.assert_called_with(PASSWORD)
 
@@ -384,6 +396,50 @@ async def test_update_device_state_fail(
             device = gateway.get_children()[0]
             with pytest.raises(ClientError):
                 await client.update_device_state(gateway, device, changes)
+
+
+@pytest.mark.asyncio
+@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+@given(
+    gateway_attributes=...,
+    device_attributes=...,
+    invalid_temperature=...,
+)
+async def test_update_device_state_warns_on_unparseable_attribute(
+    gateway_attributes: GatewayAttributes,
+    device_attributes: HvacAttributes,
+    invalid_temperature: str,
+    client_setup,
+    caplog,
+):
+    try:
+        float(invalid_temperature)
+    except Exception:
+        pass
+    else:
+        assume(False)
+    try:
+        with client_setup([(gateway_attributes, [device_attributes])]) as (_, _, mqtt):
+            mqtt.get.return_value = {
+                "state": {
+                    "reported": {
+                        "connected": "true",
+                        "11": {
+                            "properties": {
+                                "ep1:sTherS:LocalTemperature_x100": invalid_temperature,
+                            }
+                        },
+                    }
+                }
+            }
+            async with create_client(USERNAME, PASSWORD) as client:
+                gateway = client.get_gateways()[0]
+                device = gateway.get_children()[0]
+                with caplog.at_level(logging.WARNING):
+                    await client.refresh_device_state(gateway, device)
+                assert len(caplog.records) > 0
+    finally:
+        caplog.clear()
 
 
 @pytest.mark.asyncio

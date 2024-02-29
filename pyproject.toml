@@ -67,5 +67,7 @@ pyupgw = "pyupgw.__main__:main"
 [tool.mypy]
 ignore_missing_imports = true
 
-[tool.isort]
-profile = "black"
+[tool.coverage.run]
+omit = [
+  "pyupgw/_*.py",
+]

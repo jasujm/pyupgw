@@ -7,7 +7,7 @@ import unittest.mock
 
 import pytest
 from attrs import define
-from hypothesis import assume, given, settings, HealthCheck
+from hypothesis import HealthCheck, assume, given, settings
 from hypothesis import strategies as st
 
 import pyupgw._api

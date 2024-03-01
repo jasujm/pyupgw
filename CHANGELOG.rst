@@ -1,5 +1,8 @@
-Unreleased
-----------
+Version 0.12
+------------
+
+Date
+  2024-03-01
 
 Added
  * More unit test coverage

@@ -48,7 +48,7 @@ class IotShadowMqtt(contextlib.AbstractAsyncContextManager):
     - Give asyncio interface to interacting with the network thread
     """
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         *,
         aws: AwsApi,

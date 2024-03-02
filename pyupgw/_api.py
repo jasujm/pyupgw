@@ -60,7 +60,7 @@ def is_authentication_error(ex: Exception):
 class AwsApi:
     """Low level AWS API"""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         username: str,
         region: str | None = None,
@@ -180,7 +180,7 @@ class ServiceApi:
             "occupants/slider_list", id_token, access_token, client_session
         )
 
-    def get_slider_details(
+    def get_slider_details(  # noqa: PLR0913
         self,
         slider_id: str,
         slider_type: str,

@@ -73,5 +73,8 @@ ignore_missing_imports = true
 
 [tool.coverage.run]
 omit = [
-  "pyupgw/_*.py",
+  "pyupgw/_api.py",
+  "pyupgw/_mqtt.py",
+  "pyupgw/__main__.py",
+  "pyupgw/cli/*.py",
 ]

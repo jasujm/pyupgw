@@ -1,3 +1,9 @@
+Unreleased
+----------
+
+Added
+ * Parse EUID from devices
+
 Version 0.12
 ------------
 

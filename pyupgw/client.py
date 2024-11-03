@@ -99,6 +99,7 @@ def _create_shadow_attributes_parser(
 _HVAC_SHADOW_TO_ATTRIBUTES_MAP: list[
     tuple[str, str, Callable[[typing.Any], typing.Any]]
 ] = [
+    ("euid", "ep1:sZDO:EUID", str),
     ("serial_number", "ep1:sPowerMS:RadSerialNum", str),
     ("manufacturer", "ep1:sBasicS:ManufactureName", str),
     ("firmware_version", "ep1:sZDO:FirmwareVersion", str),
@@ -117,6 +118,7 @@ _HVAC_SHADOW_TO_ATTRIBUTES_MAP: list[
 _GATEWAY_SHADOW_TO_ATTRIBUTES_MAP: list[
     tuple[str, str, Callable[[typing.Any], typing.Any]]
 ] = [
+    ("euid", "ep1:sZDO:EUID", str),
     ("firmware_version", "ep0:sGateway:GatewaySoftwareVersion", str),
     ("mac_address", "ep0:sGateway:NetworkLANMAC", str),
     ("ip_address", "ep0:sGateway:NetworkLANIP", str),

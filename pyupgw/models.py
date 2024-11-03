@@ -52,6 +52,9 @@ class DeviceAttributes:
     name: str
     """Device name"""
 
+    euid: str | None = field(default=None)
+    """EUID"""
+
     firmware_version: str | None = field(default=None)
     """Firmware version"""
 
@@ -174,6 +177,10 @@ class Device(typing.Generic[AttributesType]):
     def get_name(self) -> str:
         """Get device code"""
         return self._attributes.name
+
+    def get_euid(self) -> str | None:
+        """Get device code"""
+        return self._attributes.euid
 
     def get_firmware_version(self) -> str | None:
         """Get firmware version"""

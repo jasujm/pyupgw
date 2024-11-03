@@ -4,6 +4,9 @@ Unreleased
 Added
  * Parse EUID from devices
 
+Fixed
+ * Do not allow NaN for float values in hypothesis unit tests
+
 Version 0.12
 ------------
 

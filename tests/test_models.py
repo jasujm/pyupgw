@@ -10,16 +10,16 @@ from hypothesis import strategies as st
 
 from pyupgw import Gateway, GatewayAttributes, HvacAttributes, HvacDevice, SystemMode
 
-
-@given(
-    st.builds(
-        HvacAttributes,
-        target_temperature=st.floats(allow_nan=False),
-        current_temperature=st.floats(allow_nan=False),
-        min_temp=st.floats(allow_nan=False),
-        max_temp=st.floats(allow_nan=False),
-    )
+hvac_attributes_no_nan = st.builds(
+    HvacAttributes,
+    target_temperature=st.floats(allow_nan=False),
+    current_temperature=st.floats(allow_nan=False),
+    min_temp=st.floats(allow_nan=False),
+    max_temp=st.floats(allow_nan=False),
 )
+
+
+@given(hvac_attributes_no_nan)
 def test_hvac_device(attributes: HvacAttributes):
     device = HvacDevice(
         attributes, unittest.mock.AsyncMock(), unittest.mock.AsyncMock()
@@ -43,7 +43,10 @@ def test_hvac_device(attributes: HvacAttributes):
     assert device.get_max_temp() == attributes.max_temp
 
 
-@given(...)
+@given(
+    attributes=hvac_attributes_no_nan,
+    new_attributes=hvac_attributes_no_nan,
+)
 def test_device_set_attributes(
     attributes: HvacAttributes, new_attributes: HvacAttributes
 ):
@@ -57,7 +60,9 @@ def test_device_set_attributes(
     subscriber.assert_called_with(device, asdict(new_attributes))
 
 
-@given(...)
+@given(
+    hvac_attributes_no_nan,
+)
 def test_device_set_attributes_empty_change(attributes: HvacAttributes):
     subscriber = unittest.mock.Mock()
     device = HvacDevice(
@@ -70,7 +75,10 @@ def test_device_set_attributes_empty_change(attributes: HvacAttributes):
 
 
 @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
-@given(attributes=..., new_attributes=...)
+@given(
+    attributes=hvac_attributes_no_nan,
+    new_attributes=hvac_attributes_no_nan,
+)
 def test_device_set_attributes_callback_error(
     attributes: HvacAttributes, new_attributes: HvacAttributes, caplog
 ):
@@ -87,7 +95,7 @@ def test_device_set_attributes_callback_error(
 
 
 @pytest.mark.asyncio
-@given(...)
+@given(hvac_attributes_no_nan)
 async def test_device_refresh(attributes: HvacAttributes):
     dispatch_refresh = unittest.mock.AsyncMock()
     device = HvacDevice(attributes, dispatch_refresh, unittest.mock.AsyncMock())
@@ -96,7 +104,10 @@ async def test_device_refresh(attributes: HvacAttributes):
 
 
 @pytest.mark.asyncio
-@given(...)
+@given(
+    attributes=hvac_attributes_no_nan,
+    new_attributes=hvac_attributes_no_nan,
+)
 async def test_device_update(
     attributes: HvacAttributes, new_attributes: HvacAttributes
 ):
@@ -107,7 +118,10 @@ async def test_device_update(
 
 
 @pytest.mark.asyncio
-@given(...)
+@given(
+    attributes=hvac_attributes_no_nan,
+    system_mode=...,
+)
 async def test_device_update_system_mode(
     attributes: HvacAttributes, system_mode: SystemMode
 ):
@@ -118,7 +132,7 @@ async def test_device_update_system_mode(
 
 
 @pytest.mark.asyncio
-@given(attributes=..., target_temperature=st.floats(allow_nan=False))
+@given(attributes=hvac_attributes_no_nan, target_temperature=st.floats(allow_nan=False))
 async def test_device_update_target_temperature(
     attributes: HvacAttributes, target_temperature: float
 ):

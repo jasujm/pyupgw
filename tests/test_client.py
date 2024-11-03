@@ -273,6 +273,7 @@ async def test_refresh_device_states(
                     "connected": "true",
                     "11": {
                         "properties": {
+                            "ep1:sZDO:EUID": hvac_attributes.euid,
                             "ep1:sPowerMS:RadSerialNum": hvac_attributes.serial_number,
                             "ep1:sBasicS:ManufactureName": hvac_attributes.manufacturer,
                             "ep1:sZDO:FirmwareVersion": hvac_attributes.firmware_version,

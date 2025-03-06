@@ -4,6 +4,9 @@ Unreleased
 Added
  * Parse EUID from devices
 
+Changed
+ * Update paho-mqtt to version 2
+
 Fixed
  * Do not allow NaN for float values in hypothesis unit tests
 

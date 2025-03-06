@@ -13,7 +13,7 @@ from collections.abc import Callable
 
 from awscrt.auth import AwsSigningConfig, aws_sign_request
 from awscrt.http import HttpHeaders, HttpRequest
-from paho.mqtt.client import MQTT_ERR_SUCCESS, Client
+from paho.mqtt.client import CallbackAPIVersion, Client
 
 from ._api import PYUPGW_AWS_IOT_ENDPOINT, PYUPGW_AWS_REGION, AwsApi
 from .errors import ClientError
@@ -120,7 +120,9 @@ class IotShadowMqtt(contextlib.AbstractAsyncContextManager):
 
     def _mqtt_loop(self):
         client = Client(
-            client_id=f"{self._client_name}-{uuid.uuid4()}", transport="websockets"
+            CallbackAPIVersion.VERSION2,
+            client_id=f"{self._client_name}-{uuid.uuid4()}",
+            transport="websockets",
         )
         client.ws_set_options(
             path=AWS_IOTDEVICEGATEWAY_MQTT_PATH, headers=self._build_headers
@@ -134,7 +136,10 @@ class IotShadowMqtt(contextlib.AbstractAsyncContextManager):
         client.loop_forever()
         self._loop.call_soon_threadsafe(self._async_quit_done_event.set)
 
-    def _on_connect(self, client, _userdata, _flags, _rc):
+    def _on_connect(self, client, _userdata, _flags, reason_code, _properties):
+        if reason_code.is_failure:
+            logger.warning("MQTT client failed to connect with code %r", reason_code)
+            return
         logger.info("MQTT client connected")
         with self._subscription_lock:
             self._pending_subscriptions = len(self._thing_names)
@@ -150,7 +155,12 @@ class IotShadowMqtt(contextlib.AbstractAsyncContextManager):
                     ]
                 )
 
-    def _on_subscribe(self, client, _userdata, _mid, _granted_qos):
+    def _on_subscribe(self, client, _userdata, _mid, reason_codes, _properties):
+        if any(reason_code.is_failure for reason_code in reason_codes):
+            logger.warning(
+                "MQTT client failed to subscribe with codes %r", reason_codes
+            )
+            return
         with self._subscription_lock:
             self._pending_subscriptions -= 1
             logger.debug(
@@ -185,9 +195,11 @@ class IotShadowMqtt(contextlib.AbstractAsyncContextManager):
             elif result == AWS_TOPIC_REJECTED:
                 self._loop.call_soon_threadsafe(self._rejected_callback, parsed_payload)
 
-    def _on_disconnect(self, _client, _userdata, rc):
-        if rc != MQTT_ERR_SUCCESS:
-            logger.warning("MQTT client unexpectedly disconnected with code %r", rc)
+    def _on_disconnect(self, _client, _userdata, _flags, reason_code, _properties):
+        if reason_code.is_failure:
+            logger.warning(
+                "MQTT client unexpectedly disconnected with code %r", reason_code
+            )
         else:
             logger.info("MQTT client disconnected")
         self._loop.call_soon_threadsafe(self._on_disconnected, self._thing_names)

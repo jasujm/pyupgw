@@ -3,6 +3,7 @@ Unreleased
 
 Added
  * Parse EUID from devices
+ * Support for python 3.13
 
 Changed
  * Update paho-mqtt to version 2

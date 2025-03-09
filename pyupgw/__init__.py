@@ -1,6 +1,6 @@
 """Python client for Unisenza Plus"""
 
-__version__ = "0.12"
+__version__ = "0.13"
 
 __all__ = [
     "Client",

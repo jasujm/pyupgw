@@ -1,5 +1,8 @@
-Unreleased
-----------
+Version 0.13
+------------
+
+Date
+  2025-03-09
 
 Added
  * Parse EUID from devices

@@ -118,6 +118,12 @@ class HvacAttributes(DeviceAttributes):
 
     max_temp: float | None = field(default=None)
     """Maximum setpoint temperature"""
+    
+    humidity: float | None = field(default=None)
+    """The current relative humidity as measured by the device"""
+    
+    floor_temperature: float | None = field(default=None)
+    """The current floor temperature from the external NTC probe"""
 
 
 DeviceChangeSubscriber = Callable[["Device", Mapping[str, typing.Any]], None]

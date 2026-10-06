@@ -113,6 +113,8 @@ _HVAC_SHADOW_TO_ATTRIBUTES_MAP: list[
     ("max_temp", "ep1:sTherS:MaxHeatSetpoint_x100", lambda v: float(v) / 100),
     ("system_mode", "ep1:sTherS:RunningMode", SystemMode),
     ("running_state", "ep1:sTherS:RunningState", RunningState),
+    ("humidity", "ep1:sHumiS:MeasuredValue_x100", lambda v: float(v) / 100),
+    ("floor_temperature", "ep1:sComm:FloorTemperature_x100", lambda v: float(v) / 100),
 ]
 
 _GATEWAY_SHADOW_TO_ATTRIBUTES_MAP: list[

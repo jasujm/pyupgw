@@ -115,6 +115,7 @@ _HVAC_SHADOW_TO_ATTRIBUTES_MAP: list[
     ("running_state", "ep1:sTherS:RunningState", RunningState),
     ("humidity", "ep1:sHumiS:MeasuredValue_x100", lambda v: float(v) / 100),
     ("floor_temperature", "ep1:sComm:FloorTemperature_x100", lambda v: float(v) / 100),
+    ("battery_level", "ep1:sPowerS:BatteryRemaining", int),
 ]
 
 _GATEWAY_SHADOW_TO_ATTRIBUTES_MAP: list[

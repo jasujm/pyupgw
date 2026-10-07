@@ -124,6 +124,9 @@ class HvacAttributes(DeviceAttributes):
     
     floor_temperature: float | None = field(default=None)
     """The current floor temperature from the external NTC probe"""
+    
+    battery_level: int | None = field(default=None)
+    """The remaining battery percentage (0-100)"""
 
 
 DeviceChangeSubscriber = Callable[["Device", Mapping[str, typing.Any]], None]
@@ -286,6 +289,18 @@ class HvacDevice(Device[HvacAttributes]):
     def get_max_temp(self) -> float | None:
         """Get the maximum setpoint temperature"""
         return self._attributes.max_temp
+        
+    def get_humidity(self) -> float | None:
+        """Get the current relative humidity"""
+        return self._attributes.humidity
+
+    def get_floor_temperature(self) -> float | None:
+        """Get the current floor temperature from the external NTC probe"""
+        return self._attributes.floor_temperature
+        
+    def get_battery_level(self) -> int | None:
+        """Get the remaining battery percentage"""
+        return self._attributes.battery_level
 
     async def update_system_mode(self, system_mode: SystemMode):
         """Update the system mode"""
